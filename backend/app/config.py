@@ -32,6 +32,43 @@ class DetectorConfig:
 
 
 @dataclass
+class CANSourceConfig:
+    interface: str = "vcan0"
+    channel: str = "vcan0"
+    bustype: str = "socketcan"
+    bitrate: int = 500000
+
+
+@dataclass
+class EthernetSourceConfig:
+    interface: str = "eth0"
+    filter: str = "udp port 30490"
+
+
+@dataclass
+class PcapSourceConfig:
+    file_path: str = ""
+
+
+@dataclass
+class CollectorConfig:
+    enabled: bool = False
+    interval_ms: int = 10
+    buffer_size: int = 10000
+    auto_detect: bool = True
+    detect_batch_size: int = 200
+
+
+@dataclass
+class SourcesConfig:
+    mode: str = "simulator"  # simulator / can / ethernet / pcap / multi
+    can: CANSourceConfig = field(default_factory=CANSourceConfig)
+    ethernet: EthernetSourceConfig = field(default_factory=EthernetSourceConfig)
+    pcap: PcapSourceConfig = field(default_factory=PcapSourceConfig)
+    collector: CollectorConfig = field(default_factory=CollectorConfig)
+
+
+@dataclass
 class AppConfig:
     db_url: str = "sqlite+aiosqlite:///./gateway_guard.db"
     host: str = "0.0.0.0"
@@ -40,6 +77,7 @@ class AppConfig:
     cors_origins: list = field(default_factory=lambda: ["http://localhost:5173"])
     llm: LLMConfig = field(default_factory=LLMConfig)
     detector: DetectorConfig = field(default_factory=DetectorConfig)
+    sources: SourcesConfig = field(default_factory=SourcesConfig)
 
 
 def _load_yaml() -> dict:
@@ -70,6 +108,12 @@ def load_config() -> AppConfig:
 
     detector_data = data.get("detector", {})
     _apply_section(config.detector, detector_data)
+
+    sources_data = data.get("sources", {})
+    _apply_section(config.sources, sources_data)
+    for sub in ("can", "ethernet", "pcap", "collector"):
+        sub_data = sources_data.get(sub, {})
+        _apply_section(getattr(config.sources, sub), sub_data)
 
     # --- 环境变量层：优先级最高，覆盖 YAML ---
     if env_key := os.getenv("OPENAI_API_KEY"):
