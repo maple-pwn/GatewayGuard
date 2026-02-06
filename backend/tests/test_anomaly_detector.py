@@ -36,18 +36,15 @@ class TestRuleBasedDetector:
         for a in alerts:
             assert isinstance(a, AnomalyEvent)
 
-    def test_frequency_anomaly_formula_limitation(self):
-        # Document: the current frequency check compares per-ID freq against
-        # avg_freq * threshold, where avg_freq = total_packets / time_span.
-        # This simplifies to id_count > total_count * 3.0, which is impossible.
-        # So the frequency rule never fires. This test documents that behavior.
+    def test_frequency_anomaly_on_dos(self):
+        # After fix: compares per-ID freq against per-ID average freq * threshold.
+        # DoS floods one ID far above the per-ID average, so it should trigger.
         normal = generate_normal_can(50, base_time=1000.0)
         dos = generate_dos_attack(500, base_time=1000.0)
         packets = sorted(normal + dos, key=lambda p: p.timestamp)
         alerts = self.detector.check(packets)
         freq_alerts = [a for a in alerts if a.anomaly_type == "frequency_anomaly"]
-        # Current formula cannot trigger — this documents the limitation
-        assert len(freq_alerts) == 0
+        assert len(freq_alerts) > 0
 
     def test_unknown_id_on_fuzzy(self):
         packets = generate_fuzzy_attack(50, base_time=1000.0)
