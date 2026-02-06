@@ -34,6 +34,7 @@
 - [数据库设计](#数据库设计)
 - [LLM 集成说明](#llm-集成说明)
 - [异常检测算法](#异常检测算法)
+- [真实车机部署](#真实车机部署)
 - [参考文献](#参考文献)
 
 ---
@@ -213,7 +214,14 @@ gateway-guard/
 │   │   │   ├── anomaly.py          # 异常检测与事件查询 API
 │   │   │   ├── llm.py              # LLM 分析与对话 API
 │   │   │   └── system.py           # 系统状态 API
+│   │   ├── sources/                # 数据源抽象层
+│   │   │   ├── base.py             # DataSource 抽象基类
+│   │   │   ├── can_source.py       # SocketCAN 实时采集
+│   │   │   ├── ethernet_source.py  # Scapy 以太网抓包
+│   │   │   ├── pcap_source.py      # PCAP/BLF/ASC 文件导入
+│   │   │   └── simulator_source.py # 模拟器数据源封装
 │   │   ├── services/               # 核心业务逻辑
+│   │   │   ├── collector.py        # 实时流量采集引擎
 │   │   │   ├── traffic_parser.py   # 多协议统一解析服务
 │   │   │   ├── anomaly_detector.py # 两级异常检测引擎
 │   │   │   └── llm_engine.py       # LLM 分析引擎（含 Function Calling）
@@ -240,6 +248,9 @@ gateway-guard/
 │   ├── package.json
 │   └── vite.config.js              # Vite 配置（含 API 代理）
 ├── start.sh                        # 一键启动脚本
+├── deploy/                         # 部署相关
+│   ├── setup_vcan.sh               # vCAN 虚拟接口配置脚本
+│   └── README.md                   # 真实车机部署指南
 └── README.md
 ```
 
@@ -339,6 +350,10 @@ LLM 通过 Function Calling 自动调用后端 API 获取实时数据后回答�
 | POST | `/api/traffic/simulate` | 生成模拟流量（支持多种攻击场景） |
 | GET | `/api/traffic/stats` | 获取流量统计概览 |
 | GET | `/api/traffic/packets` | 分页查询流量记录 |
+| POST | `/api/traffic/collect/start` | 启动实时流量采集 |
+| POST | `/api/traffic/collect/stop` | 停止实时流量采集 |
+| GET | `/api/traffic/collect/status` | 查询采集状态与统计 |
+| POST | `/api/traffic/import` | 导入离线抓包文件（PCAP/BLF/ASC） |
 
 ### 异常检测
 
@@ -440,6 +455,50 @@ LLM 通过 Function Calling 自动调用后端 API 获取实时数据后回答�
 | IForest 污染率 | `0.05` | Isolation Forest contamination 参数 |
 | LLM temperature | `0.3` | 生成温度（低值更确定性） |
 | LLM max_tokens | `1024` | 单次生成最大 Token 数 |
+
+---
+
+## 真实车机部署
+
+本系统支持从模拟环境无缝切换到真实车载网络环境。通过数据源抽象层，可在不修改检测逻辑的前提下接入真实 CAN 总线、车载以太网或离线抓包文件。
+
+### 数据源模式
+
+| 模式 | 说明 | 适用场景 |
+|------|------|----------|
+| `simulator` | 内置模拟器生成数据 | 开发调试、课堂演示 |
+| `can` | SocketCAN 实时读取 | 真实 CAN 总线硬件 |
+| `ethernet` | Scapy 以太网抓包 | 车载以太网 SOME/IP |
+| `pcap` | 导入离线文件 | 回放分析 (.pcap/.blf/.asc) |
+| `multi` | CAN + 以太网同时采集 | 完整车机部署 |
+
+### 快速切换
+
+编辑 `backend/config.yaml` 中的 `sources` 配置段：
+
+```yaml
+sources:
+  mode: can              # simulator / can / ethernet / pcap / multi
+  can:
+    interface: can0      # SocketCAN 接口名
+    bitrate: 500000
+  ethernet:
+    interface: eth0
+    filter: "udp port 30490"
+  collector:
+    enabled: true        # 启动时自动开始采集
+    auto_detect: true    # 自动触发异常检测
+```
+
+也可通过前端 Dashboard 的「数据源与实时采集」面板动态切换模式并控制采集。
+
+### 硬件要求
+
+- **CAN 适配器**：SocketCAN 兼容设备（如 PEAK PCAN-USB、Kvaser Leaf）
+- **操作系统**：Linux 5.4+（SocketCAN 内核支持）
+- **权限**：CAN/以太网采集需要 root 或 `cap_net_raw` capability
+
+详细部署步骤参见 [`deploy/README.md`](deploy/README.md)。
 
 ---
 

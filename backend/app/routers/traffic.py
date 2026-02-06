@@ -131,3 +131,49 @@ async def simulate_traffic(
 
     await _save_packets(packets, db)
     return {"generated": len(packets), "scenario": scenario}
+
+
+# ---- 实时采集控制 API ----
+
+from app.services.collector import collector
+
+
+@router.post("/collect/start")
+async def start_collect(
+    mode: str = Query(None, enum=["simulator", "can", "ethernet", "pcap", "multi"]),
+):
+    """启动实时流量采集"""
+    return await collector.start(mode=mode)
+
+
+@router.post("/collect/stop")
+async def stop_collect():
+    """停止实时流量采集"""
+    return await collector.stop()
+
+
+@router.get("/collect/status")
+async def collect_status():
+    """查询采集状态"""
+    return collector.stats
+
+
+@router.post("/import")
+async def import_file(
+    file_path: str = Query(..., description="PCAP/BLF/ASC 文件路径"),
+    db: AsyncSession = Depends(get_db),
+):
+    """导入离线抓包文件"""
+    from app.sources.pcap_source import PcapSource
+
+    src = PcapSource(file_path=file_path)
+    try:
+        await src.start()
+    except Exception as e:
+        return {"error": str(e)}
+
+    packets = await src.read(max_count=50000)
+    await src.stop()
+
+    await _save_packets(packets, db)
+    return {"imported": len(packets), "file": file_path}

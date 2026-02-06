@@ -1,5 +1,6 @@
 """GatewayGuard - FastAPI 主入口"""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,12 +9,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db
 from app.routers import traffic, anomaly, llm, system
+from app.services.collector import collector
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+
+    # 如果配置了自动启动采集，则在启动时开始采集
+    if settings.sources.collector.enabled:
+        logger.info("Auto-starting collector (mode=%s)", settings.sources.mode)
+        await collector.start()
+
     yield
+
+    # 优雅关闭采集器
+    if collector.running:
+        await collector.stop()
 
 
 app = FastAPI(

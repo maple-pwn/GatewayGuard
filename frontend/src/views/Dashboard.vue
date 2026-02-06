@@ -44,6 +44,53 @@
       </el-col>
     </el-row>
 
+    <!-- 实时采集控制 -->
+    <el-card style="margin-bottom: 20px">
+      <template #header>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span>数据源与实时采集</span>
+          <el-tag :type="collectStatus.running ? 'success' : 'info'" effect="dark">
+            {{ collectStatus.running ? '采集中' : '已停止' }}
+          </el-tag>
+        </div>
+      </template>
+      <el-row :gutter="16" align="middle">
+        <el-col :span="8">
+          <span style="margin-right: 8px; color: #606266">数据源模式:</span>
+          <el-select v-model="sourceMode" style="width: 160px" :disabled="collectStatus.running">
+            <el-option label="模拟器" value="simulator" />
+            <el-option label="CAN 总线" value="can" />
+            <el-option label="以太网" value="ethernet" />
+            <el-option label="PCAP 文件" value="pcap" />
+            <el-option label="多源混合" value="multi" />
+          </el-select>
+        </el-col>
+        <el-col :span="8">
+          <el-button
+            type="success" @click="startCollect" :loading="collectLoading"
+            :disabled="collectStatus.running"
+          >启动采集</el-button>
+          <el-button
+            type="danger" @click="stopCollect" :loading="collectLoading"
+            :disabled="!collectStatus.running"
+          >停止采集</el-button>
+          <el-button type="warning" plain @click="showImportDialog = true">
+            导入文件
+          </el-button>
+        </el-col>
+        <el-col :span="8" v-if="collectStatus.running">
+          <el-descriptions :column="2" size="small" border>
+            <el-descriptions-item label="已采集">
+              {{ collectStatus.total_collected || 0 }}
+            </el-descriptions-item>
+            <el-descriptions-item label="异常数">
+              {{ collectStatus.total_anomalies || 0 }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </el-col>
+      </el-row>
+    </el-card>
+
     <!-- 操作区 -->
     <el-card style="margin-bottom: 20px">
       <template #header>
@@ -145,11 +192,34 @@
         <el-button type="danger" @click="doPartialClean">确认清理</el-button>
       </template>
     </el-dialog>
+
+    <!-- 文件导入对话框 -->
+    <el-dialog v-model="showImportDialog" title="导入抓包文件" width="480px">
+      <el-form label-width="100px">
+        <el-form-item label="文件路径">
+          <el-input
+            v-model="importFilePath"
+            placeholder="服务器上的文件路径，如 /data/capture.pcap"
+          />
+        </el-form-item>
+        <el-form-item>
+          <span style="color: #909399; font-size: 12px">
+            支持格式: .pcap / .pcapng / .blf / .asc
+          </span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showImportDialog = false">取消</el-button>
+        <el-button type="primary" @click="doImportFile" :loading="importLoading">
+          导入
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { trafficApi, anomalyApi, systemApi } from '../api/index.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -166,6 +236,15 @@ const cleanMode = ref('keep_recent')
 const keepCount = ref(200)
 const cleanProtocol = ref('CAN')
 const cleanSeverity = ref('low')
+
+// 实时采集相关
+const sourceMode = ref('simulator')
+const collectStatus = ref({ running: false, total_collected: 0, total_anomalies: 0 })
+const collectLoading = ref(false)
+const showImportDialog = ref(false)
+const importFilePath = ref('')
+const importLoading = ref(false)
+let pollTimer = null
 
 async function loadData() {
   try {
@@ -255,5 +334,83 @@ async function doPartialClean() {
   } catch { ElMessage.error('清理失败') }
 }
 
-onMounted(loadData)
+// 实时采集控制
+async function fetchCollectStatus() {
+  try {
+    const res = await trafficApi.collectStatus()
+    collectStatus.value = res.data
+  } catch { /* ignore */ }
+}
+
+async function startCollect() {
+  collectLoading.value = true
+  try {
+    const res = await trafficApi.collectStart(sourceMode.value)
+    if (res.data.error) {
+      ElMessage.warning(res.data.error)
+    } else {
+      ElMessage.success(`采集已启动 (${sourceMode.value})`)
+      startPolling()
+    }
+    await fetchCollectStatus()
+  } finally { collectLoading.value = false }
+}
+
+async function stopCollect() {
+  collectLoading.value = true
+  try {
+    await trafficApi.collectStop()
+    ElMessage.info('采集已停止')
+    stopPolling()
+    await fetchCollectStatus()
+    await loadData()
+  } finally { collectLoading.value = false }
+}
+
+async function doImportFile() {
+  if (!importFilePath.value.trim()) {
+    ElMessage.warning('请输入文件路径')
+    return
+  }
+  importLoading.value = true
+  try {
+    const res = await trafficApi.importFile(importFilePath.value.trim())
+    if (res.data.error) {
+      ElMessage.error(res.data.error)
+    } else {
+      ElMessage.success(`成功导入 ${res.data.imported} 条报文`)
+      showImportDialog.value = false
+      importFilePath.value = ''
+      await loadData()
+    }
+  } catch { ElMessage.error('导入失败') }
+  finally { importLoading.value = false }
+}
+
+function startPolling() {
+  stopPolling()
+  pollTimer = setInterval(async () => {
+    await fetchCollectStatus()
+    await loadData()
+  }, 3000)
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+onMounted(async () => {
+  await loadData()
+  await fetchCollectStatus()
+  if (collectStatus.value.running) {
+    startPolling()
+  }
+})
+
+onUnmounted(() => {
+  stopPolling()
+})
 </script>

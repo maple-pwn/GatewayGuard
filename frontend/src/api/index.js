@@ -7,6 +7,12 @@ export const trafficApi = {
   getPackets: (params) => api.get('/traffic/packets', { params }),
   simulate: (scenario, count) =>
     api.post(`/traffic/simulate?scenario=${scenario}&count=${count}`),
+  collectStart: (mode) =>
+    api.post(`/traffic/collect/start${mode ? '?mode=' + mode : ''}`),
+  collectStop: () => api.post('/traffic/collect/stop'),
+  collectStatus: () => api.get('/traffic/collect/status'),
+  importFile: (filePath) =>
+    api.post(`/traffic/import?file_path=${encodeURIComponent(filePath)}`),
 }
 
 export const anomalyApi = {
