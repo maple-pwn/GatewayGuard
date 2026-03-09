@@ -15,6 +15,23 @@ from app.models.anomaly import AnomalyEvent
 from app.config import settings
 
 
+def _is_can_family(packet: UnifiedPacket) -> bool:
+    return packet.protocol.upper().startswith("CAN")
+
+
+def _median_gap(timestamps: List[float]) -> float:
+    if len(timestamps) < 2:
+        return 0.0
+    gaps = [
+        max(timestamps[idx] - timestamps[idx - 1], 0.0)
+        for idx in range(1, len(timestamps))
+    ]
+    positive_gaps = [gap for gap in gaps if gap > 0]
+    if not positive_gaps:
+        return 0.0
+    return float(np.median(positive_gaps))
+
+
 class RuleBasedDetector:
     """基于规则的快速异常检测"""
 
@@ -36,6 +53,7 @@ class RuleBasedDetector:
     def __init__(self):
         self.freq_threshold = settings.detector.frequency_threshold
         self.id_rate_baseline = {}
+        self.id_gap_baseline = {}
         self.learned_can_ids = set()
         self.id_payload_baseline = defaultdict(
             lambda: {"constant": 0.0, "zero_ff": 0.0}
@@ -49,11 +67,12 @@ class RuleBasedDetector:
         return alerts
 
     def fit(self, normal_packets: List[UnifiedPacket]):
-        can_packets = [p for p in normal_packets if p.protocol == "CAN"]
+        can_packets = [p for p in normal_packets if _is_can_family(p)]
         if not can_packets:
             return
 
         id_counts = Counter(p.msg_id for p in can_packets)
+        id_timestamps = defaultdict(list)
         min_count = max(3, len(can_packets) // 10000)
         self.learned_can_ids = {
             msg_id for msg_id, cnt in id_counts.items() if cnt >= min_count
@@ -68,6 +87,7 @@ class RuleBasedDetector:
         const_counts = Counter()
         zero_ff_counts = Counter()
         for p in can_packets:
+            id_timestamps[p.msg_id].append(p.timestamp)
             if not p.payload_hex:
                 continue
             byte_list = [
@@ -84,6 +104,7 @@ class RuleBasedDetector:
         for msg_id, cnt in id_counts.items():
             const_ratio = const_counts[msg_id] / cnt
             zero_ff_ratio = zero_ff_counts[msg_id] / cnt
+            self.id_gap_baseline[msg_id] = _median_gap(id_timestamps[msg_id])
             self.id_payload_baseline[msg_id] = {
                 "constant": const_ratio,
                 "zero_ff": zero_ff_ratio,
@@ -99,10 +120,14 @@ class RuleBasedDetector:
         if time_span <= 0:
             return alerts
 
-        id_counts = Counter(p.msg_id for p in packets if p.protocol == "CAN")
+        can_packets = [p for p in packets if _is_can_family(p)]
+        id_counts = Counter(p.msg_id for p in can_packets)
         if not id_counts:
             return alerts
         avg_per_id_freq = sum(id_counts.values()) / len(id_counts) / time_span
+        id_timestamps = defaultdict(list)
+        for packet in can_packets:
+            id_timestamps[packet.msg_id].append(packet.timestamp)
 
         for msg_id, count in id_counts.items():
             freq = count / time_span
@@ -111,14 +136,36 @@ class RuleBasedDetector:
                 threshold = max(threshold, self.id_rate_baseline[msg_id] * 2.0)
             if threshold <= 0:
                 continue
-            if freq > threshold:
-                ratio = freq / threshold
+            ratio = freq / threshold
+            baseline_gap = self.id_gap_baseline.get(msg_id, 0.0)
+            current_gap = _median_gap(id_timestamps[msg_id])
+            burst_ratio = 0.0
+            baseline_rate = self.id_rate_baseline.get(msg_id, 0.0)
+            rate_ratio = freq / baseline_rate if baseline_rate > 0 else 0.0
+            if baseline_gap > 0 and current_gap > 0:
+                burst_ratio = baseline_gap / current_gap
+
+            burst_detected = burst_ratio >= 3.0 and rate_ratio >= 1.5 and count >= 20
+            if ratio > 1.0 or burst_detected:
+                ratio = max(ratio, burst_ratio, rate_ratio)
                 if ratio > 3.0:
                     severity = "critical"
                 elif ratio > 1.5:
                     severity = "high"
                 else:
                     severity = "medium"
+                description = (
+                    f"报文 {msg_id} 频率异常: {freq:.1f} pkt/s, "
+                    f"每ID均值 {avg_per_id_freq:.1f} pkt/s, "
+                    f"超出阈值 {self.freq_threshold}x"
+                )
+                detection_method = "rule_frequency"
+                if burst_detected:
+                    description = (
+                        f"报文 {msg_id} 疑似DoS/Flooding: 当前中位间隔 {current_gap:.6f}s, "
+                        f"训练基线 {baseline_gap:.6f}s, 突发倍率 {burst_ratio:.2f}x"
+                    )
+                    detection_method = "rule_burst_frequency"
                 alerts.append(
                     AnomalyEvent(
                         timestamp=packets[-1].timestamp,
@@ -127,10 +174,8 @@ class RuleBasedDetector:
                         confidence=min(ratio, 1.0),
                         protocol="CAN",
                         source_node=msg_id,
-                        description=f"报文 {msg_id} 频率异常: {freq:.1f} pkt/s, "
-                        f"每ID均值 {avg_per_id_freq:.1f} pkt/s, "
-                        f"超出阈值 {self.freq_threshold}x",
-                        detection_method="rule_frequency",
+                        description=description,
+                        detection_method=detection_method,
                     )
                 )
         return alerts
@@ -140,7 +185,7 @@ class RuleBasedDetector:
         alerts = []
         seen_unknown = set()
         for p in packets:
-            if p.protocol != "CAN":
+            if not _is_can_family(p):
                 continue
             known_ids = self.learned_can_ids or self.VALID_CAN_IDS
             if p.msg_id not in known_ids and p.msg_id not in seen_unknown:
@@ -163,7 +208,7 @@ class RuleBasedDetector:
         """检测负载异常（全FF等Spoofing特征）"""
         alerts = []
         for p in packets:
-            if p.protocol != "CAN" or not p.payload_hex:
+            if not _is_can_family(p) or not p.payload_hex:
                 continue
             byte_list = [
                 p.payload_hex[i : i + 2].lower()
@@ -236,7 +281,10 @@ class IsolationForestDetector:
                 msg_id_num = hash(p.msg_id) % 0xFFF
             payload_len = len(p.payload_hex) // 2 if p.payload_hex else 0
             payload_entropy = self._byte_entropy(p.payload_hex)
-            proto_num = {"CAN": 0, "ETH": 1, "V2X": 2}.get(p.protocol, 3)
+            if p.protocol.upper().startswith("CAN"):
+                proto_num = 0
+            else:
+                proto_num = {"ETH": 1, "V2X": 2}.get(p.protocol, 3)
             domain_num = {
                 "powertrain": 0,
                 "chassis": 1,
