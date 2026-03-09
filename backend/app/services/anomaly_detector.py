@@ -2,10 +2,12 @@
 
 两级检测架构：
 1. 规则引擎：频率异常、ID越界、负载异常
-2. ML模型：Isolation Forest 无监督异常检测
+2. ML模型：时序画像 + Isolation Forest 无监督异常检测
 """
 
 from collections import Counter, defaultdict
+from collections import deque
+from dataclasses import dataclass, field
 from typing import List
 
 import numpy as np
@@ -30,6 +32,39 @@ def _median_gap(timestamps: List[float]) -> float:
     if not positive_gaps:
         return 0.0
     return float(np.median(positive_gaps))
+
+
+def _payload_bytes(payload_hex: str) -> List[int]:
+    if not payload_hex:
+        return []
+    return [int(payload_hex[i : i + 2], 16) for i in range(0, len(payload_hex), 2)]
+
+
+def _payload_change_ratio(current: List[int], previous: List[int]) -> float:
+    if not current or not previous:
+        return 0.0
+    compare_len = min(len(current), len(previous))
+    if compare_len <= 0:
+        return 0.0
+    changed = sum(1 for idx in range(compare_len) if current[idx] != previous[idx])
+    return changed / compare_len
+
+
+def _first_word(payload_bytes: List[int]) -> int:
+    if len(payload_bytes) < 2:
+        return 0
+    return payload_bytes[0] << 8 | payload_bytes[1]
+
+
+@dataclass
+class TemporalState:
+    prev_ts: float | None = None
+    prev_payload: List[int] | None = None
+    prev_word: int | None = None
+    gaps: deque[float] = field(default_factory=lambda: deque(maxlen=8))
+    payload_changes: deque[float] = field(default_factory=lambda: deque(maxlen=8))
+    value_deltas: deque[float] = field(default_factory=lambda: deque(maxlen=8))
+    repeat_flags: deque[float] = field(default_factory=lambda: deque(maxlen=8))
 
 
 class RuleBasedDetector:
@@ -293,19 +328,8 @@ class IsolationForestDetector:
                 "v2x": 4,
             }.get(p.domain, 5)
 
-            payload_bytes = (
-                [
-                    int(p.payload_hex[i : i + 2], 16)
-                    for i in range(0, len(p.payload_hex), 2)
-                ]
-                if p.payload_hex
-                else []
-            )
-            first_word = (
-                payload_bytes[0] << 8 | payload_bytes[1]
-                if len(payload_bytes) >= 2
-                else 0
-            )
+            payload_bytes = _payload_bytes(p.payload_hex)
+            first_word = _first_word(payload_bytes)
 
             delta_t = 0.0
             payload_delta = 0.0
@@ -317,12 +341,7 @@ class IsolationForestDetector:
                 if payload_bytes and prev_bytes:
                     compare_len = min(len(payload_bytes), len(prev_bytes))
                     if compare_len > 0:
-                        changed = sum(
-                            1
-                            for idx in range(compare_len)
-                            if payload_bytes[idx] != prev_bytes[idx]
-                        )
-                        payload_delta = changed / compare_len
+                        payload_delta = _payload_change_ratio(payload_bytes, prev_bytes)
                 value_delta = abs(first_word - prev_word) / 65535.0
 
             last_by_id[p.msg_id] = (p.timestamp, payload_bytes, first_word)
@@ -373,7 +392,7 @@ class IsolationForestDetector:
 
         alerts = []
         for i, (pred, score) in enumerate(zip(preds, scores)):
-            if pred == -1:
+            if pred == -1 and score < -0.02:
                 p = packets[i]
                 if score < -0.05:
                     ml_severity = "critical"
@@ -402,16 +421,174 @@ class IsolationForestDetector:
         return alerts
 
 
+class TemporalProfileDetector:
+    def __init__(self):
+        self.window_size = 8
+        self.id_profiles = {}
+        self.is_fitted = False
+
+    def fit(self, normal_packets: List[UnifiedPacket]):
+        grouped = defaultdict(list)
+        for packet in normal_packets:
+            if _is_can_family(packet):
+                grouped[packet.msg_id].append(packet)
+
+        profiles = {}
+        for msg_id, packets in grouped.items():
+            packets.sort(key=lambda packet: packet.timestamp)
+            gaps = []
+            value_deltas = []
+            payload_changes = []
+            repeat_flags = []
+            prev_ts = None
+            prev_payload = None
+            prev_word = None
+            for packet in packets:
+                payload = _payload_bytes(packet.payload_hex)
+                word = _first_word(payload)
+                if (
+                    prev_ts is not None
+                    and prev_payload is not None
+                    and prev_word is not None
+                ):
+                    gaps.append(max(packet.timestamp - prev_ts, 0.0))
+                    payload_changes.append(_payload_change_ratio(payload, prev_payload))
+                    value_deltas.append(abs(word - prev_word) / 65535.0)
+                    repeat_flags.append(1.0 if payload == prev_payload else 0.0)
+                prev_ts = packet.timestamp
+                prev_payload = payload
+                prev_word = word
+
+            if not gaps:
+                continue
+
+            profiles[msg_id] = {
+                "gap_median": float(np.median(gaps)),
+                "gap_p10": float(np.percentile(gaps, 10)),
+                "payload_change_median": float(np.median(payload_changes))
+                if payload_changes
+                else 0.0,
+                "value_delta_p90": float(np.percentile(value_deltas, 90))
+                if value_deltas
+                else 0.0,
+                "repeat_ratio": float(np.mean(repeat_flags)) if repeat_flags else 0.0,
+            }
+
+        self.id_profiles = profiles
+        self.is_fitted = bool(self.id_profiles)
+
+    def predict(self, packets: List[UnifiedPacket]) -> List[AnomalyEvent]:
+        if not self.is_fitted or not packets:
+            return []
+
+        states: defaultdict[str, TemporalState] = defaultdict(TemporalState)
+        alerts = []
+
+        for packet in packets:
+            if not _is_can_family(packet):
+                continue
+            profile = self.id_profiles.get(packet.msg_id)
+            if not profile:
+                continue
+
+            state = states[packet.msg_id]
+            if state.gaps.maxlen != self.window_size:
+                state.gaps = deque(state.gaps, maxlen=self.window_size)
+                state.payload_changes = deque(
+                    state.payload_changes, maxlen=self.window_size
+                )
+                state.value_deltas = deque(state.value_deltas, maxlen=self.window_size)
+                state.repeat_flags = deque(state.repeat_flags, maxlen=self.window_size)
+            payload = _payload_bytes(packet.payload_hex)
+            word = _first_word(payload)
+            prev_ts = state.prev_ts
+            prev_payload = state.prev_payload
+            prev_word = state.prev_word
+
+            if (
+                prev_ts is not None
+                and prev_payload is not None
+                and prev_word is not None
+            ):
+                gap = max(packet.timestamp - prev_ts, 0.0)
+                state.gaps.append(gap)
+                state.payload_changes.append(
+                    _payload_change_ratio(payload, prev_payload)
+                )
+                state.value_deltas.append(abs(word - prev_word) / 65535.0)
+                state.repeat_flags.append(1.0 if payload == prev_payload else 0.0)
+
+            state.prev_ts = packet.timestamp
+            state.prev_payload = payload
+            state.prev_word = word
+
+            if len(state.gaps) < self.window_size:
+                continue
+
+            gap_median = float(np.median(list(state.gaps)))
+            repeat_ratio = float(np.mean(list(state.repeat_flags)))
+            payload_change_mean = float(np.mean(list(state.payload_changes)))
+            value_delta_mean = float(np.mean(list(state.value_deltas)))
+
+            reasons = []
+            score = 0.0
+
+            baseline_gap = max(profile["gap_median"], 1e-6)
+            if gap_median > 0:
+                gap_ratio = baseline_gap / gap_median
+                if gap_ratio >= 4.0 and gap_median <= max(profile["gap_p10"], 1e-6):
+                    reasons.append(f"突发倍率 {gap_ratio:.2f}x")
+                    score = max(score, gap_ratio / 6.0)
+
+            if (
+                repeat_ratio >= 0.85
+                and repeat_ratio - profile["repeat_ratio"] >= 0.45
+                and payload_change_mean <= profile["payload_change_median"] + 0.05
+            ):
+                reasons.append(f"重复率 {repeat_ratio:.2f}")
+                score = max(score, repeat_ratio)
+
+            baseline_value = max(profile["value_delta_p90"], 0.01)
+            if (
+                value_delta_mean >= baseline_value * 3.0
+                and payload_change_mean >= profile["payload_change_median"] + 0.2
+            ):
+                reasons.append(f"值变化倍率 {(value_delta_mean / baseline_value):.2f}x")
+                score = max(score, min(value_delta_mean / baseline_value, 1.0))
+
+            if reasons:
+                alerts.append(
+                    AnomalyEvent(
+                        timestamp=packet.timestamp,
+                        anomaly_type="ml_anomaly",
+                        severity="high" if score >= 0.8 else "medium",
+                        confidence=round(min(max(score, 0.6), 1.0), 3),
+                        protocol=packet.protocol,
+                        source_node=packet.source,
+                        target_node=packet.msg_id,
+                        description=(
+                            f"时序画像检测到异常: 报文 {packet.msg_id}, "
+                            + ", ".join(reasons)
+                        ),
+                        detection_method="temporal_profile",
+                    )
+                )
+
+        return alerts
+
+
 class AnomalyDetectorService:
     """统一异常检测入口"""
 
     def __init__(self):
         self.rule_detector = RuleBasedDetector()
+        self.temporal_detector = TemporalProfileDetector()
         self.ml_detector = IsolationForestDetector()
 
     def train(self, normal_packets: List[UnifiedPacket]):
         """用正常流量训练ML模型"""
         self.rule_detector.fit(normal_packets)
+        self.temporal_detector.fit(normal_packets)
         self.ml_detector.fit(normal_packets)
 
     def detect(self, packets: List[UnifiedPacket]) -> List[AnomalyEvent]:
@@ -422,6 +599,7 @@ class AnomalyDetectorService:
             alerts.extend(self.rule_detector.check(packets))
 
         if settings.detector.ml_enabled and self.ml_detector.is_fitted:
+            alerts.extend(self.temporal_detector.predict(packets))
             alerts.extend(self.ml_detector.predict(packets))
 
         # 按置信度降序排列
