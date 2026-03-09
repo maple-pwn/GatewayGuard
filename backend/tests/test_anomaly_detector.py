@@ -1,26 +1,38 @@
 """异常检测引擎单元测试"""
 
-import time
-import pytest
 from app.models.packet import UnifiedPacket
 from app.models.anomaly import AnomalyEvent
 from app.services.anomaly_detector import (
-    RuleBasedDetector, IsolationForestDetector, AnomalyDetectorService,
+    RuleBasedDetector,
+    IsolationForestDetector,
+    AnomalyDetectorService,
 )
 from app.simulators.can_simulator import (
-    generate_normal_can, generate_dos_attack,
-    generate_fuzzy_attack, generate_spoofing_attack,
+    generate_normal_can,
+    generate_dos_attack,
+    generate_fuzzy_attack,
+    generate_spoofing_attack,
 )
 
 
-def _make_packet(**kwargs) -> UnifiedPacket:
-    defaults = dict(
-        timestamp=1000.0, protocol="CAN", source="ECM",
-        destination="BROADCAST", msg_id="0x0C0",
-        payload_hex="1A2B3C4D5E6F7A8B", domain="powertrain",
+def _make_packet(
+    timestamp: float = 1000.0,
+    protocol: str = "CAN",
+    source: str = "ECM",
+    destination: str = "BROADCAST",
+    msg_id: str = "0x0C0",
+    payload_hex: str = "1A2B3C4D5E6F7A8B",
+    domain: str = "powertrain",
+) -> UnifiedPacket:
+    return UnifiedPacket(
+        timestamp=timestamp,
+        protocol=protocol,
+        source=source,
+        destination=destination,
+        msg_id=msg_id,
+        payload_hex=payload_hex,
+        domain=domain,
     )
-    defaults.update(kwargs)
-    return UnifiedPacket(**defaults)
 
 
 class TestRuleBasedDetector:
@@ -58,6 +70,42 @@ class TestRuleBasedDetector:
         payload_alerts = [a for a in alerts if a.anomaly_type == "payload_anomaly"]
         assert len(payload_alerts) > 0
 
+    def test_learned_ids_reduce_unknown_alerts(self):
+        train_packets = [
+            _make_packet(msg_id="0x500", timestamp=1000.0 + i * 0.01) for i in range(20)
+        ]
+        self.detector.fit(train_packets)
+
+        eval_packets = [
+            _make_packet(msg_id="0x500", timestamp=2000.0 + i * 0.01) for i in range(10)
+        ]
+        alerts = self.detector.check(eval_packets)
+        id_alerts = [a for a in alerts if a.anomaly_type == "unknown_can_id"]
+        assert len(id_alerts) == 0
+
+    def test_payload_baseline_suppresses_constant_zero(self):
+        train_packets = [
+            _make_packet(
+                msg_id="0x510",
+                payload_hex="0000000000000000",
+                timestamp=1000.0 + i * 0.01,
+            )
+            for i in range(40)
+        ]
+        self.detector.fit(train_packets)
+
+        eval_packets = [
+            _make_packet(
+                msg_id="0x510",
+                payload_hex="0000000000000000",
+                timestamp=2000.0 + i * 0.01,
+            )
+            for i in range(5)
+        ]
+        alerts = self.detector.check(eval_packets)
+        payload_alerts = [a for a in alerts if a.anomaly_type == "payload_anomaly"]
+        assert len(payload_alerts) == 0
+
     def test_empty_input(self):
         alerts = self.detector.check([])
         assert alerts == []
@@ -87,11 +135,11 @@ class TestIsolationForestDetector:
     def test_extract_features_shape(self):
         packets = generate_normal_can(10, base_time=1000.0)
         features = self.detector.extract_features(packets)
-        assert features.shape == (10, 5)
+        assert features.shape == (10, 8)
 
     def test_extract_features_empty(self):
         features = self.detector.extract_features([])
-        assert features.shape == (0, 5)
+        assert features.shape == (0, 8)
 
     def test_byte_entropy_uniform(self):
         entropy = IsolationForestDetector._byte_entropy("FFFFFFFF")
