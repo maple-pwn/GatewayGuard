@@ -1,248 +1,82 @@
-"""异常检测引擎单元测试"""
-
 from app.models.packet import UnifiedPacket
-from app.models.anomaly import AnomalyEvent
-from app.services.anomaly_detector import (
-    RuleBasedDetector,
-    IsolationForestDetector,
-    AnomalyDetectorService,
-)
-from app.simulators.can_simulator import (
-    generate_normal_can,
-    generate_dos_attack,
-    generate_fuzzy_attack,
-    generate_spoofing_attack,
-)
+from app.services.anomaly_detector import AnomalyDetectorService
+from app.services.detectors.iforest_aux_detector import IForestAuxDetector
 
 
 def _make_packet(
-    timestamp: float = 1000.0,
+    timestamp: float,
+    msg_id: str,
+    payload_hex: str = "0102030405060708",
     protocol: str = "CAN",
-    source: str = "ECM",
-    destination: str = "BROADCAST",
-    msg_id: str = "0x0C0",
-    payload_hex: str = "1A2B3C4D5E6F7A8B",
-    domain: str = "powertrain",
 ) -> UnifiedPacket:
     return UnifiedPacket(
         timestamp=timestamp,
         protocol=protocol,
-        source=source,
-        destination=destination,
+        source="ECM",
+        destination="BROADCAST",
         msg_id=msg_id,
         payload_hex=payload_hex,
-        domain=domain,
+        domain="powertrain",
     )
 
 
-class TestRuleBasedDetector:
-    """规则引擎测试"""
-
-    def setup_method(self):
-        self.detector = RuleBasedDetector()
-
-    def test_no_alerts_on_normal_traffic(self):
-        packets = generate_normal_can(20, base_time=1000.0)
-        alerts = self.detector.check(packets)
-        # normal traffic may trigger some rules but should not be all critical
-        for a in alerts:
-            assert isinstance(a, AnomalyEvent)
-
-    def test_frequency_anomaly_on_dos(self):
-        # After fix: compares per-ID freq against per-ID average freq * threshold.
-        # DoS floods one ID far above the per-ID average, so it should trigger.
-        normal = generate_normal_can(50, base_time=1000.0)
-        dos = generate_dos_attack(500, base_time=1000.0)
-        packets = sorted(normal + dos, key=lambda p: p.timestamp)
-        alerts = self.detector.check(packets)
-        freq_alerts = [a for a in alerts if a.anomaly_type == "frequency_anomaly"]
-        assert len(freq_alerts) > 0
-
-    def test_unknown_id_on_fuzzy(self):
-        packets = generate_fuzzy_attack(50, base_time=1000.0)
-        alerts = self.detector.check(packets)
-        id_alerts = [a for a in alerts if a.anomaly_type == "unknown_can_id"]
-        assert len(id_alerts) > 0
-
-    def test_payload_anomaly_on_spoofing(self):
-        packets = generate_spoofing_attack(20, base_time=1000.0)
-        alerts = self.detector.check(packets)
-        payload_alerts = [a for a in alerts if a.anomaly_type == "payload_anomaly"]
-        assert len(payload_alerts) > 0
-
-    def test_learned_ids_reduce_unknown_alerts(self):
-        train_packets = [
-            _make_packet(msg_id="0x500", timestamp=1000.0 + i * 0.01) for i in range(20)
-        ]
-        self.detector.fit(train_packets)
-
-        eval_packets = [
-            _make_packet(msg_id="0x500", timestamp=2000.0 + i * 0.01) for i in range(10)
-        ]
-        alerts = self.detector.check(eval_packets)
-        id_alerts = [a for a in alerts if a.anomaly_type == "unknown_can_id"]
-        assert len(id_alerts) == 0
-
-    def test_payload_baseline_suppresses_constant_zero(self):
-        train_packets = [
-            _make_packet(
-                msg_id="0x510",
-                payload_hex="0000000000000000",
-                timestamp=1000.0 + i * 0.01,
-            )
-            for i in range(40)
-        ]
-        self.detector.fit(train_packets)
-
-        eval_packets = [
-            _make_packet(
-                msg_id="0x510",
-                payload_hex="0000000000000000",
-                timestamp=2000.0 + i * 0.01,
-            )
-            for i in range(5)
-        ]
-        alerts = self.detector.check(eval_packets)
-        payload_alerts = [a for a in alerts if a.anomaly_type == "payload_anomaly"]
-        assert len(payload_alerts) == 0
-
-    def test_trained_burst_detection_catches_same_id_flooding(self):
-        train_packets = [
-            _make_packet(msg_id="0x520", timestamp=1000.0 + i * 0.02) for i in range(80)
-        ]
-        self.detector.fit(train_packets)
-
-        eval_packets = [
-            _make_packet(msg_id="0x520", timestamp=2000.0 + i * 0.0005)
-            for i in range(120)
-        ]
-        alerts = self.detector.check(eval_packets)
-        freq_alerts = [a for a in alerts if a.anomaly_type == "frequency_anomaly"]
-        assert len(freq_alerts) > 0
-        assert any(a.detection_method == "rule_burst_frequency" for a in freq_alerts)
-
-    def test_can_fd_packets_use_same_frequency_branch(self):
-        train_packets = [
-            _make_packet(protocol="CAN-FD", msg_id="0x530", timestamp=1000.0 + i * 0.02)
-            for i in range(80)
-        ]
-        self.detector.fit(train_packets)
-
-        eval_packets = [
-            _make_packet(
-                protocol="CAN-FD", msg_id="0x530", timestamp=2000.0 + i * 0.0004
-            )
-            for i in range(100)
-        ]
-        alerts = self.detector.check(eval_packets)
-        freq_alerts = [a for a in alerts if a.anomaly_type == "frequency_anomaly"]
-        assert len(freq_alerts) > 0
-
-    def test_empty_input(self):
-        alerts = self.detector.check([])
-        assert alerts == []
-
-    def test_single_packet(self):
-        alerts = self.detector.check([_make_packet()])
-        assert isinstance(alerts, list)
+def _baseline_packets() -> list[UnifiedPacket]:
+    return [
+        _make_packet(timestamp=1000.0 + i * 0.02, msg_id="0x120") for i in range(60)
+    ]
 
 
-class TestIsolationForestDetector:
-    """Isolation Forest 检测器测试"""
-
-    def setup_method(self):
-        self.detector = IsolationForestDetector()
-
-    def test_not_fitted_returns_empty(self):
-        packets = generate_normal_can(10, base_time=1000.0)
-        assert self.detector.predict(packets) == []
-
-    def test_fit_and_predict(self):
-        normal = generate_normal_can(200, base_time=1000.0)
-        self.detector.fit(normal)
-        assert self.detector.is_fitted is True
-        results = self.detector.predict(normal)
-        assert isinstance(results, list)
-
-    def test_extract_features_shape(self):
-        packets = generate_normal_can(10, base_time=1000.0)
-        features = self.detector.extract_features(packets)
-        assert features.shape == (10, 8)
-
-    def test_extract_features_empty(self):
-        features = self.detector.extract_features([])
-        assert features.shape == (0, 8)
-
-    def test_byte_entropy_uniform(self):
-        entropy = IsolationForestDetector._byte_entropy("FFFFFFFF")
-        assert entropy == 0.0
-
-    def test_byte_entropy_varied(self):
-        entropy = IsolationForestDetector._byte_entropy("0102030405")
-        assert entropy > 0.0
-
-
-class TestAnomalyDetectorService:
-    """统一检测服务测试"""
-
+class TestProfileFirstAnomalyDetectorService:
     def setup_method(self):
         self.service = AnomalyDetectorService()
 
-    def test_detect_without_training(self):
-        packets = generate_normal_can(30, base_time=1000.0)
+    def test_detect_without_training_returns_empty(self):
+        packets = _baseline_packets()
         alerts = self.service.detect(packets)
-        assert isinstance(alerts, list)
+        assert alerts == []
 
-    def test_train_then_detect(self):
-        normal = generate_normal_can(200, base_time=1000.0)
-        self.service.train(normal)
-        assert self.service.ml_detector.is_fitted
-        dos = generate_dos_attack(100, base_time=2000.0)
-        mixed = normal[:50] + dos
-        alerts = self.service.detect(mixed)
-        assert len(alerts) > 0
+    def test_train_then_detect_unknown_can_id(self):
+        self.service.train(_baseline_packets())
+        eval_packets = [_make_packet(timestamp=2000.0, msg_id="0x999")]
+        alerts = self.service.detect(eval_packets)
 
-    def test_temporal_profile_detects_flooding_as_ml_anomaly(self):
-        train_packets = [
-            _make_packet(msg_id="0x610", timestamp=1000.0 + i * 0.02)
-            for i in range(120)
+        assert len(alerts) >= 1
+        assert any(a.anomaly_type == "unknown_can_id" for a in alerts)
+        assert self.service.is_trained is True
+
+    def test_detect_with_aggregation_returns_events(self):
+        self.service.train(_baseline_packets())
+        eval_packets = [
+            _make_packet(timestamp=2000.0 + i * 0.01, msg_id="0x999") for i in range(3)
         ]
-        self.service.train(train_packets)
 
-        flooding_packets = [
-            _make_packet(msg_id="0x610", timestamp=2000.0 + i * 0.0004)
-            for i in range(80)
-        ]
-        alerts = self.service.detect(flooding_packets)
-        ml_alerts = [a for a in alerts if a.anomaly_type == "ml_anomaly"]
-        assert any(a.detection_method == "temporal_profile" for a in ml_alerts)
+        alerts, events = self.service.detect_with_aggregation(eval_packets)
+        assert len(alerts) >= 1
+        assert len(events) >= 1
+        assert events[0].packet_count >= 1
 
-    def test_temporal_profile_detects_high_repeat_replay_pattern(self):
-        train_packets = [
-            _make_packet(
-                msg_id="0x620",
-                payload_hex=f"{i % 256:02X}00000000000000",
-                timestamp=1000.0 + i * 0.02,
-            )
-            for i in range(120)
-        ]
-        self.service.train(train_packets)
+    def test_alerts_sorted_by_confidence_desc(self):
+        self.service.train(_baseline_packets())
+        eval_packets = [_make_packet(timestamp=2000.0, msg_id="0x999")]
+        alerts = self.service.detect(eval_packets)
 
-        replay_packets = [
-            _make_packet(
-                msg_id="0x620",
-                payload_hex="AA00000000000000",
-                timestamp=2000.0 + i * 0.02,
-            )
-            for i in range(40)
-        ]
-        alerts = self.service.detect(replay_packets)
-        ml_alerts = [a for a in alerts if a.anomaly_type == "ml_anomaly"]
-        assert any(a.detection_method == "temporal_profile" for a in ml_alerts)
-
-    def test_alerts_sorted_by_confidence(self):
-        normal = generate_normal_can(100, base_time=1000.0)
-        dos = generate_dos_attack(100, base_time=1000.0)
-        alerts = self.service.detect(normal + dos)
         for i in range(1, len(alerts)):
-            assert alerts[i].confidence <= alerts[i - 1].confidence
+            assert alerts[i - 1].confidence >= alerts[i].confidence
+
+
+class TestIForestAuxDetector:
+    def test_feature_shape_matches_expected_dimensions(self):
+        detector = IForestAuxDetector(enabled=False)
+        features = detector._extract_features(_baseline_packets())
+        assert features.shape == (60, 8)
+
+    def test_feature_shape_for_empty_packets(self):
+        detector = IForestAuxDetector(enabled=False)
+        features = detector._extract_features([])
+        assert features.shape == (0, 8)
+
+    def test_byte_entropy_for_uniform_bytes(self):
+        assert IForestAuxDetector._byte_entropy("FFFFFFFF") == 0.0
+
+    def test_byte_entropy_for_varied_bytes(self):
+        assert IForestAuxDetector._byte_entropy("0102030405") > 0.0

@@ -40,7 +40,7 @@ class AnomalyDetectorService:
         self.payload_detector = PayloadProfileDetector(self.profile_mgr)
         self.iforest_detector = IForestAuxDetector(
             contamination=cfg.iforest_contamination,
-            enabled=cfg.enable_iforest,
+            enabled=cfg.enable_iforest_aux,
         )
 
         self.aggregator = AlertAggregator(time_window_ms=cfg.event_window_ms)
@@ -55,7 +55,7 @@ class AnomalyDetectorService:
             normal_packets, vehicle_name=settings.detector.vehicle_profile
         )
 
-        if settings.detector.enable_iforest:
+        if settings.detector.enable_iforest_aux:
             self.iforest_detector.fit(normal_packets)
 
         self.is_trained = True
@@ -72,7 +72,7 @@ class AnomalyDetectorService:
         if settings.detector.enable_payload_profile:
             alerts.extend(self.payload_detector.detect(packets))
 
-        if settings.detector.enable_iforest:
+        if settings.detector.enable_iforest_aux:
             alerts.extend(self.iforest_detector.detect(packets))
 
         alerts.sort(key=lambda a: a.confidence, reverse=True)
@@ -83,5 +83,7 @@ class AnomalyDetectorService:
     ) -> Tuple[List[AnomalyEvent], List[AggregatedEvent]]:
         """Detection with event aggregation"""
         alerts = self.detect(packets)
+        if not settings.detector.enable_event_aggregation:
+            return alerts, []
         events = self.aggregator.aggregate(alerts)
         return alerts, events

@@ -30,7 +30,8 @@ class DetectorConfig:
     iforest_contamination: float = 0.05
     anomaly_window_size: int = 100
     unknown_id_policy: str = "strict_profile"
-    enable_iforest: bool = False
+    enable_iforest_aux: bool = False
+    enable_event_aggregation: bool = True
     enable_payload_profile: bool = True
     event_window_ms: float = 1000.0
     min_train_packets: int = 10
@@ -39,6 +40,14 @@ class DetectorConfig:
     temporal_window_size: int = 8
     vehicle_profile: str = "default"
     profile_dir: str = "./profiles"
+
+    @property
+    def enable_iforest(self) -> bool:
+        return self.enable_iforest_aux
+
+    @enable_iforest.setter
+    def enable_iforest(self, value: bool) -> None:
+        self.enable_iforest_aux = bool(value)
 
 
 @dataclass
