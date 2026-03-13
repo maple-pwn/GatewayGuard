@@ -1,14 +1,15 @@
 """异常检测相关API路由"""
 
 import json
-import time
+from typing import Optional, cast
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.anomaly import AnomalyEventORM, AnomalyEventResponse, AnomalyEventList
+from app.config import settings
+from app.models.anomaly import AnomalyEventORM
 from app.models.packet import PacketORM, UnifiedPacket
 from app.services.anomaly_detector import AnomalyDetectorService
 
@@ -73,6 +74,7 @@ async def get_anomaly_event_detail(
     row = result.scalar_one_or_none()
     if not row:
         return {"error": "Event not found"}
+    raw_data = cast(Optional[str], row.raw_data)
     return {
         "id": row.id,
         "timestamp": row.timestamp,
@@ -83,7 +85,7 @@ async def get_anomaly_event_detail(
         "source_node": row.source_node,
         "target_node": row.target_node,
         "description": row.description,
-        "raw_data": json.loads(row.raw_data) if row.raw_data else None,
+        "raw_data": json.loads(raw_data) if raw_data is not None else None,
         "detection_method": row.detection_method,
         "status": row.status,
     }
@@ -92,7 +94,10 @@ async def get_anomaly_event_detail(
 @router.post("/detect")
 async def trigger_detection(
     limit: int = Query(500, le=2000),
-    with_aggregation: bool = Query(False),
+    with_aggregation: Optional[bool] = Query(
+        None,
+        description="Whether to return aggregated event-level output; defaults to detector.enable_event_aggregation when omitted",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(PacketORM).order_by(PacketORM.timestamp.desc()).limit(limit)
@@ -104,18 +109,24 @@ async def trigger_detection(
 
     packets = []
     for r in rows:
+        payload_bytes = cast(Optional[bytes], r.payload)
+        payload_decoded_raw = cast(Optional[str], r.payload_decoded)
+        source = cast(Optional[str], r.source)
+        destination = cast(Optional[str], r.destination)
+        msg_id = cast(Optional[str], r.msg_id)
+        domain = cast(Optional[str], r.domain)
         packets.append(
             UnifiedPacket(
-                timestamp=r.timestamp,
-                protocol=r.protocol,
-                source=r.source or "",
-                destination=r.destination or "",
-                msg_id=r.msg_id or "",
-                payload_hex=r.payload.hex() if r.payload else "",
-                payload_decoded=json.loads(r.payload_decoded)
-                if r.payload_decoded
+                timestamp=cast(float, r.timestamp),
+                protocol=cast(str, r.protocol),
+                source=source if source is not None else "",
+                destination=destination if destination is not None else "",
+                msg_id=msg_id if msg_id is not None else "",
+                payload_hex=payload_bytes.hex() if payload_bytes is not None else "",
+                payload_decoded=json.loads(payload_decoded_raw)
+                if payload_decoded_raw is not None
                 else {},
-                domain=r.domain or "",
+                domain=domain if domain is not None else "",
             )
         )
 
@@ -124,7 +135,13 @@ async def trigger_detection(
         if len(normal) > 20:
             detector.train(normal)
 
-    if with_aggregation:
+    effective_with_aggregation = (
+        settings.detector.enable_event_aggregation
+        if with_aggregation is None
+        else with_aggregation
+    )
+
+    if effective_with_aggregation:
         alerts, events = detector.detect_with_aggregation(packets)
         for a in alerts:
             orm = AnomalyEventORM(
