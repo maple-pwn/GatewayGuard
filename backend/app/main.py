@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
-from app.routers import traffic, anomaly, llm, system
+from app.routers import traffic, anomaly, llm, system, ws
 from app.services.collector import collector
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,7 @@ app.include_router(traffic.router)
 app.include_router(anomaly.router)
 app.include_router(llm.router)
 app.include_router(system.router)
+app.include_router(ws.router)
 
 
 @app.get("/")

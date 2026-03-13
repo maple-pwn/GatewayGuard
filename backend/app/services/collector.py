@@ -15,6 +15,7 @@ from app.models.packet import UnifiedPacket, PacketORM
 from app.models.anomaly import AnomalyEventORM
 from app.sources.base import DataSource
 from app.services.anomaly_detector import AnomalyDetectorService
+from app.services.ws_manager import ws_manager
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,13 @@ class CollectorService:
                         self._stats["total_collected"] += len(batch)
 
                 if self._auto_detect and len(self._pending) >= self._detect_batch:
-                    await self._persist_and_detect()
+                    asyncio.create_task(self._persist_and_detect())
+
+                # 节流广播统计信息（最多 1 次/秒）
+                await ws_manager.broadcast_throttled({
+                    "type": "stats_update",
+                    "data": self.stats,
+                }, min_interval=1.0)
 
                 await asyncio.sleep(self._interval)
             except asyncio.CancelledError:
@@ -203,6 +210,28 @@ class CollectorService:
                     "Detected %d anomalies from %d packets",
                     len(alerts), len(packets),
                 )
+                await ws_manager.broadcast({
+                    "type": "alerts",
+                    "data": [
+                        {
+                            "anomaly_type": a.anomaly_type,
+                            "severity": a.severity,
+                            "confidence": a.confidence,
+                            "protocol": a.protocol,
+                            "source_node": a.source_node,
+                            "description": a.description,
+                            "detection_method": a.detection_method,
+                            "timestamp": a.timestamp,
+                        }
+                        for a in alerts
+                    ],
+                })
+
+            # 检测完成后推送最新统计
+            await ws_manager.broadcast({
+                "type": "stats_update",
+                "data": self.stats,
+            })
 
 
 # 全局单例

@@ -92,70 +92,99 @@ async def get_anomaly_event_detail(
 @router.post("/detect")
 async def trigger_detection(
     limit: int = Query(500, le=2000),
+    with_aggregation: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
-    """手动触发异常检测：读取最近的流量数据并执行检测"""
-    # 1. 读取最近的流量记录
-    stmt = (
-        select(PacketORM)
-        .order_by(PacketORM.timestamp.desc())
-        .limit(limit)
-    )
+    stmt = select(PacketORM).order_by(PacketORM.timestamp.desc()).limit(limit)
     result = await db.execute(stmt)
     rows = result.scalars().all()
 
     if not rows:
         return {"detected": 0, "message": "No traffic data available"}
 
-    # 2. 转换为 UnifiedPacket
     packets = []
     for r in rows:
-        packets.append(UnifiedPacket(
-            timestamp=r.timestamp,
-            protocol=r.protocol,
-            source=r.source or "",
-            destination=r.destination or "",
-            msg_id=r.msg_id or "",
-            payload_hex=r.payload.hex() if r.payload else "",
-            payload_decoded=json.loads(r.payload_decoded) if r.payload_decoded else {},
-            domain=r.domain or "",
-        ))
+        packets.append(
+            UnifiedPacket(
+                timestamp=r.timestamp,
+                protocol=r.protocol,
+                source=r.source or "",
+                destination=r.destination or "",
+                msg_id=r.msg_id or "",
+                payload_hex=r.payload.hex() if r.payload else "",
+                payload_decoded=json.loads(r.payload_decoded)
+                if r.payload_decoded
+                else {},
+                domain=r.domain or "",
+            )
+        )
 
-    # 3. 用正常流量训练（如果尚未训练）
-    if not detector.ml_detector.is_fitted:
-        normal = [p for p in packets if not p.metadata.get("attack")]
+    if not detector.is_trained:
+        normal = [p for p in packets if not getattr(p, "metadata", {}).get("attack")]
         if len(normal) > 20:
             detector.train(normal)
 
-    # 4. 执行检测
-    alerts = detector.detect(packets)
-
-    # 5. 存入数据库
-    for a in alerts:
-        orm = AnomalyEventORM(
-            timestamp=a.timestamp,
-            anomaly_type=a.anomaly_type,
-            severity=a.severity,
-            confidence=a.confidence,
-            protocol=a.protocol,
-            source_node=a.source_node,
-            target_node=a.target_node,
-            description=a.description,
-            detection_method=a.detection_method,
-            status="open",
-        )
-        db.add(orm)
-    await db.commit()
-
-    return {
-        "detected": len(alerts),
-        "alerts": [
-            {
-                "anomaly_type": a.anomaly_type,
-                "severity": a.severity,
-                "confidence": a.confidence,
-                "description": a.description,
-            }
-            for a in alerts
-        ],
-    }
+    if with_aggregation:
+        alerts, events = detector.detect_with_aggregation(packets)
+        for a in alerts:
+            orm = AnomalyEventORM(
+                timestamp=a.timestamp,
+                anomaly_type=a.anomaly_type,
+                severity=a.severity,
+                confidence=a.confidence,
+                protocol=a.protocol,
+                source_node=a.source_node,
+                target_node=a.target_node,
+                description=a.description,
+                detection_method=a.detection_method,
+                status="open",
+                event_id=a.event_id,
+                packet_count=a.packet_count,
+            )
+            db.add(orm)
+        await db.commit()
+        return {
+            "detected": len(alerts),
+            "events": len(events),
+            "aggregated_events": [
+                {
+                    "event_id": e.event_id,
+                    "first_seen": e.first_seen,
+                    "last_seen": e.last_seen,
+                    "packet_count": e.packet_count,
+                    "anomaly_type": e.anomaly_type,
+                    "severity": e.severity,
+                    "confidence": e.confidence,
+                }
+                for e in events
+            ],
+        }
+    else:
+        alerts = detector.detect(packets)
+        for a in alerts:
+            orm = AnomalyEventORM(
+                timestamp=a.timestamp,
+                anomaly_type=a.anomaly_type,
+                severity=a.severity,
+                confidence=a.confidence,
+                protocol=a.protocol,
+                source_node=a.source_node,
+                target_node=a.target_node,
+                description=a.description,
+                detection_method=a.detection_method,
+                status="open",
+            )
+            db.add(orm)
+        await db.commit()
+        return {
+            "detected": len(alerts),
+            "alerts": [
+                {
+                    "anomaly_type": a.anomaly_type,
+                    "severity": a.severity,
+                    "confidence": a.confidence,
+                    "description": a.description,
+                }
+                for a in alerts
+            ],
+        }

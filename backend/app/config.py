@@ -29,6 +29,16 @@ class DetectorConfig:
     frequency_threshold: float = 3.0
     iforest_contamination: float = 0.05
     anomaly_window_size: int = 100
+    unknown_id_policy: str = "strict_profile"
+    enable_iforest: bool = False
+    enable_payload_profile: bool = True
+    event_window_ms: float = 1000.0
+    min_train_packets: int = 10
+    burst_z_threshold: float = 4.0
+    gap_z_threshold: float = 3.0
+    temporal_window_size: int = 8
+    vehicle_profile: str = "default"
+    profile_dir: str = "./profiles"
 
 
 @dataclass

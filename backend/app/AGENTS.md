@@ -2,90 +2,65 @@
 
 FastAPI application implementing three-tier security pipeline: detection → understanding → dialogue.
 
-## Entry Point
+## Architecture
 
-`main.py` - FastAPI app with CORS, router registration, startup/shutdown lifecycle hooks
+- **Entry Point**: `main.py` - FastAPI app with CORS, routers, startup/shutdown hooks
+- **API Routers**: HTTP endpoints (traffic, anomaly, llm, system)
+- **Core Services**: Async collectors, parsers, detectors, LLM engine
+- **Simulators**: CAN/Ethernet/V2X traffic generators
+- **Models**: Pydantic schemas for validation
 
-## API Routers
+## Directory References
 
-### traffic.py
-- POST `/api/traffic/start` - Start traffic collection (simulator/CAN/Ethernet/PCAP)
-- POST `/api/traffic/stop` - Stop collection
-- GET `/api/traffic/stats` - Traffic statistics by protocol
-- WebSocket `/api/traffic/stream` - Real-time packet streaming
+See subdirectory `AGENTS.md` files for detailed architecture:
 
-### anomaly.py
-- POST `/api/anomaly/start` - Enable anomaly detection
-- POST `/api/anomaly/stop` - Disable detection
-- GET `/api/anomaly/events` - Query anomaly events (filter by severity/time)
-- GET `/api/anomaly/stats` - Detection statistics
+- `routers/AGENTS.md` - API endpoint definitions
+- `services/AGENTS.md` - Core service logic
+- `simulators/AGENTS.md` - Traffic generation
+- `models/AGENTS.md` - Data schemas
 
-### llm.py
-- POST `/api/llm/chat` - Natural language security queries
-- POST `/api/llm/analyze` - Semantic analysis of traffic patterns
-- POST `/api/llm/report` - Generate security reports
+## Health & Monitoring
 
-### system.py
-- GET `/api/system/health` - Health check
-- GET `/api/system/config` - Current configuration
+**Liveness**: `/health/live` - Process alive.
 
-## Core Services
+**Readiness**: `/health/ready` - Database, LLM engine, collectors available.
 
-### collector.py
-Traffic collection orchestrator with pluggable data sources:
-- `start_collection(source_type)` - Initialize source (simulator/CAN/Ethernet/PCAP)
-- `stop_collection()` - Graceful shutdown
-- `get_stats()` - Aggregated traffic metrics
-- Defensive: logs warnings on source init failures, continues with available sources
+**Startup Checks**: Database connectivity, model files readable, required services accessible.
 
-### traffic_parser.py
-Multi-protocol parser producing UnifiedPacket abstraction:
-- `parse_packet(raw_data, protocol)` - Protocol-specific parsing
-- UnifiedPacket: (timestamp, protocol, source, dest, msg_id, payload, domain)
-- Enables cross-protocol anomaly correlation
-
-### anomaly_detector.py
-Two-tier detection system:
-1. **Rule-based**: Frequency thresholds, unknown IDs, payload anomalies
-2. **ML-based**: Isolation Forest on 5D feature vector (byte entropy)
-- `detect(packet)` - Returns AnomalyEvent or None
-- `update_model(packets)` - Retrain Isolation Forest
-
-### llm_engine.py
-LLM integration with function calling (ReAct pattern):
-- `chat(message, history)` - Conversational interface
-- `analyze(context)` - Semantic analysis
-- Tools: `query_traffic_stats(protocol, time_range)`, `get_anomaly_events(severity, limit)`
-- Dual provider: OpenAI API or Ollama (local)
-
-## Simulators
-
-### can_simulator.py
-CAN bus traffic generator:
-- Normal patterns: periodic messages (0x100-0x7FF)
-- Attack patterns: DoS flooding, spoofing, replay
-
-### ethernet_simulator.py
-Automotive Ethernet/SOME-IP simulator:
-- Service discovery messages
-- Method call/response patterns
-
-### v2x_simulator.py
-V2X communication simulator:
-- BSM (Basic Safety Message)
-- CAM (Cooperative Awareness Message)
-
-## Models
-
-Pydantic schemas for request/response validation:
-- `Packet` - Unified packet representation
-- `AnomalyEvent` - Detection result with severity/confidence
-- `ChatRequest/ChatResponse` - LLM interaction
+**Metrics**: Request counts, latency distributions, anomaly detection rates, connection pool utilization.
 
 ## Configuration
 
-`config.yaml` loaded at startup, environment variables override:
-- App settings (host, port)
-- LLM provider (openai/ollama) with API keys
-- Detector thresholds (frequency_threshold, iforest_contamination)
-- CORS origins
+`config.yaml` with environment variable overrides (see `config.yaml`).
+
+## Application Lifecycle
+
+**Startup**: Database connection pool initialization, model loading, traffic collector warm-up, LLM engine initialization.
+
+**Shutdown**: Graceful collector termination, pending packet processing flush, connection pool cleanup, model cache eviction.
+
+**Signal Handling**: SIGTERM/SIGINT handlers ensure clean shutdown within 30s timeout.
+
+## Middleware & Dependency Injection
+
+**Middleware Stack**: Request timing, CORS, rate limiting, structured logging, exception handlers.
+
+**Dependency Injection**: FastAPI `Depends()` for database sessions, configuration, LLM engine, security context, packet parsers.
+
+**Security Plugins**: Token validation, role-based access control, API key authentication.
+
+## Error Handling & Logging
+
+**Error Categories**: Validation (422), Business (400), External (502), System (500).
+
+**Logging Strategy**: Structured JSON logs via `structlog`, levels DEBUG/INFO/WARN/ERROR, correlation IDs per request, anomaly event logging.
+
+**Exception Handlers**: Custom exceptions mapper to appropriate HTTP status codes with detailed error payloads.
+
+## Database Connection Management
+
+**Connection Pool**: SQLAlchemy async engine with 10-20 connection pool, 5s checkout timeout.
+
+**Connection Lifecycle**: Per-request session via FastAPI dependencies, automatic context management, connection reuse via SessionScope.
+
+**Health Monitoring**: Periodic connection pool stats logging, idle connection eviction, automatic reconnect on connection loss.

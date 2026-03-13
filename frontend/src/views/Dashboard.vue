@@ -49,9 +49,14 @@
       <template #header>
         <div style="display: flex; align-items: center; justify-content: space-between">
           <span>数据源与实时采集</span>
-          <el-tag :type="collectStatus.running ? 'success' : 'info'" effect="dark">
-            {{ collectStatus.running ? '采集中' : '已停止' }}
-          </el-tag>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <el-tag :type="wsStateTag" size="small" effect="plain">
+              {{ wsStateLabel }}
+            </el-tag>
+            <el-tag :type="collectStatus.running ? 'success' : 'info'" effect="dark">
+              {{ collectStatus.running ? '采集中' : '已停止' }}
+            </el-tag>
+          </div>
         </div>
       </template>
       <el-row :gutter="16" align="middle">
@@ -134,6 +139,30 @@
           style="margin-bottom: 12px"
         />
       </div>
+    </el-card>
+
+    <!-- 实时告警 -->
+    <el-card v-if="realtimeAlerts.length > 0" style="margin-bottom: 20px">
+      <template #header>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span>实时告警</span>
+          <el-button text size="small" @click="realtimeAlerts = []">清空</el-button>
+        </div>
+      </template>
+      <el-timeline>
+        <el-timeline-item
+          v-for="(alert, idx) in realtimeAlerts"
+          :key="idx"
+          :type="severityColor(alert.severity)"
+          :timestamp="new Date(alert.timestamp * 1000).toLocaleTimeString()"
+          placement="top"
+        >
+          <el-tag :type="severityColor(alert.severity)" size="small" style="margin-right: 6px">
+            {{ alert.severity }}
+          </el-tag>
+          {{ alert.description }}
+        </el-timeline-item>
+      </el-timeline>
     </el-card>
 
     <!-- 流量记录表 -->
@@ -219,9 +248,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { trafficApi, anomalyApi, systemApi } from '../api/index.js'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { createRealtimeWs } from '../api/ws.js'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 
 const stats = ref({ total_packets: 0, can_count: 0, eth_count: 0, v2x_count: 0 })
 const packets = ref([])
@@ -245,6 +275,23 @@ const showImportDialog = ref(false)
 const importFilePath = ref('')
 const importLoading = ref(false)
 let pollTimer = null
+
+// WebSocket 实时推送
+const wsState = ref('disconnected')
+const realtimeAlerts = ref([])
+let rtWs = null
+
+const wsStateTag = computed(() => ({
+  connected: 'success', connecting: 'warning', disconnected: 'danger',
+}[wsState.value] || 'info'))
+
+const wsStateLabel = computed(() => ({
+  connected: 'WS 已连接', connecting: 'WS 连接中', disconnected: 'WS 断开',
+}[wsState.value] || 'WS 未知'))
+
+function severityColor(s) {
+  return { critical: 'danger', high: 'warning', medium: '', low: 'info' }[s] || 'info'
+}
 
 async function loadData() {
   try {
@@ -350,9 +397,8 @@ async function startCollect() {
       ElMessage.warning(res.data.error)
     } else {
       ElMessage.success(`采集已启动 (${sourceMode.value})`)
-      startPolling()
+      collectStatus.value.running = true
     }
-    await fetchCollectStatus()
   } finally { collectLoading.value = false }
 }
 
@@ -361,8 +407,7 @@ async function stopCollect() {
   try {
     await trafficApi.collectStop()
     ElMessage.info('采集已停止')
-    stopPolling()
-    await fetchCollectStatus()
+    collectStatus.value.running = false
     await loadData()
   } finally { collectLoading.value = false }
 }
@@ -387,30 +432,47 @@ async function doImportFile() {
   finally { importLoading.value = false }
 }
 
-function startPolling() {
-  stopPolling()
-  pollTimer = setInterval(async () => {
-    await fetchCollectStatus()
-    await loadData()
-  }, 3000)
-}
+// WebSocket 实时推送处理
+function initWebSocket() {
+  rtWs = createRealtimeWs()
 
-function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
+  rtWs.on('state', (s) => { wsState.value = s })
+
+  rtWs.on('stats_update', (data) => {
+    collectStatus.value = data
+    // 同步刷新 DB 统计（节流：WebSocket 连接时每 5 秒拉一次）
+    if (!pollTimer) {
+      pollTimer = setInterval(() => loadData(), 5000)
+    }
+  })
+
+  rtWs.on('alerts', (alerts) => {
+    for (const a of alerts) {
+      realtimeAlerts.value.unshift(a)
+      if (a.severity === 'critical' || a.severity === 'high') {
+        ElNotification({
+          title: '实时告警',
+          message: a.description,
+          type: a.severity === 'critical' ? 'error' : 'warning',
+          duration: 5000,
+        })
+      }
+    }
+    // 只保留最近 20 条
+    if (realtimeAlerts.value.length > 20) {
+      realtimeAlerts.value = realtimeAlerts.value.slice(0, 20)
+    }
+  })
 }
 
 onMounted(async () => {
   await loadData()
   await fetchCollectStatus()
-  if (collectStatus.value.running) {
-    startPolling()
-  }
+  initWebSocket()
 })
 
 onUnmounted(() => {
-  stopPolling()
+  if (rtWs) { rtWs.close(); rtWs = null }
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 })
 </script>

@@ -106,6 +106,38 @@ class TestRuleBasedDetector:
         payload_alerts = [a for a in alerts if a.anomaly_type == "payload_anomaly"]
         assert len(payload_alerts) == 0
 
+    def test_trained_burst_detection_catches_same_id_flooding(self):
+        train_packets = [
+            _make_packet(msg_id="0x520", timestamp=1000.0 + i * 0.02) for i in range(80)
+        ]
+        self.detector.fit(train_packets)
+
+        eval_packets = [
+            _make_packet(msg_id="0x520", timestamp=2000.0 + i * 0.0005)
+            for i in range(120)
+        ]
+        alerts = self.detector.check(eval_packets)
+        freq_alerts = [a for a in alerts if a.anomaly_type == "frequency_anomaly"]
+        assert len(freq_alerts) > 0
+        assert any(a.detection_method == "rule_burst_frequency" for a in freq_alerts)
+
+    def test_can_fd_packets_use_same_frequency_branch(self):
+        train_packets = [
+            _make_packet(protocol="CAN-FD", msg_id="0x530", timestamp=1000.0 + i * 0.02)
+            for i in range(80)
+        ]
+        self.detector.fit(train_packets)
+
+        eval_packets = [
+            _make_packet(
+                protocol="CAN-FD", msg_id="0x530", timestamp=2000.0 + i * 0.0004
+            )
+            for i in range(100)
+        ]
+        alerts = self.detector.check(eval_packets)
+        freq_alerts = [a for a in alerts if a.anomaly_type == "frequency_anomaly"]
+        assert len(freq_alerts) > 0
+
     def test_empty_input(self):
         alerts = self.detector.check([])
         assert alerts == []
@@ -169,6 +201,44 @@ class TestAnomalyDetectorService:
         mixed = normal[:50] + dos
         alerts = self.service.detect(mixed)
         assert len(alerts) > 0
+
+    def test_temporal_profile_detects_flooding_as_ml_anomaly(self):
+        train_packets = [
+            _make_packet(msg_id="0x610", timestamp=1000.0 + i * 0.02)
+            for i in range(120)
+        ]
+        self.service.train(train_packets)
+
+        flooding_packets = [
+            _make_packet(msg_id="0x610", timestamp=2000.0 + i * 0.0004)
+            for i in range(80)
+        ]
+        alerts = self.service.detect(flooding_packets)
+        ml_alerts = [a for a in alerts if a.anomaly_type == "ml_anomaly"]
+        assert any(a.detection_method == "temporal_profile" for a in ml_alerts)
+
+    def test_temporal_profile_detects_high_repeat_replay_pattern(self):
+        train_packets = [
+            _make_packet(
+                msg_id="0x620",
+                payload_hex=f"{i % 256:02X}00000000000000",
+                timestamp=1000.0 + i * 0.02,
+            )
+            for i in range(120)
+        ]
+        self.service.train(train_packets)
+
+        replay_packets = [
+            _make_packet(
+                msg_id="0x620",
+                payload_hex="AA00000000000000",
+                timestamp=2000.0 + i * 0.02,
+            )
+            for i in range(40)
+        ]
+        alerts = self.service.detect(replay_packets)
+        ml_alerts = [a for a in alerts if a.anomaly_type == "ml_anomaly"]
+        assert any(a.detection_method == "temporal_profile" for a in ml_alerts)
 
     def test_alerts_sorted_by_confidence(self):
         normal = generate_normal_can(100, base_time=1000.0)

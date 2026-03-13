@@ -10,6 +10,7 @@ from app.database import Base
 
 # ---- SQLAlchemy ORM ----
 
+
 class AnomalyEventORM(Base):
     __tablename__ = "anomaly_events"
 
@@ -26,9 +27,14 @@ class AnomalyEventORM(Base):
     detection_method = Column(String(32))
     status = Column(String(16), default="open")
     created_at = Column(DateTime, default=datetime.utcnow)
+    event_id = Column(String(32))
+    packet_count = Column(Integer, default=1)
+    vehicle_profile = Column(String(64))
+    evidence = Column(Text)
 
 
 # ---- Pydantic Schema ----
+
 
 class AnomalyEvent(BaseModel):
     timestamp: float
@@ -41,6 +47,10 @@ class AnomalyEvent(BaseModel):
     description: str = ""
     detection_method: str = ""
     raw_packets: list = []
+    event_id: Optional[str] = None
+    packet_count: int = 1
+    vehicle_profile: Optional[str] = None
+    evidence: list = []
 
 
 class AnomalyEventResponse(BaseModel):
