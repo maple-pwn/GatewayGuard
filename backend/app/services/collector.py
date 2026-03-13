@@ -188,7 +188,12 @@ class CollectorService:
             await db.commit()
 
             if not self._detector.iforest_detector.is_fitted:
-                normal = [pk for pk in packets if not pk.metadata.get("attack")]
+                normal = [
+                    pk
+                    for pk in packets
+                    if isinstance(getattr(pk, "metadata", None), dict)
+                    and pk.metadata.get("attack") is False
+                ]
                 if len(normal) > 20:
                     self._detector.train(normal)
 

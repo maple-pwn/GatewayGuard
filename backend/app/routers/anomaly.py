@@ -131,7 +131,12 @@ async def trigger_detection(
         )
 
     if not detector.is_trained:
-        normal = [p for p in packets if not getattr(p, "metadata", {}).get("attack")]
+        normal = [
+            p
+            for p in packets
+            if isinstance(getattr(p, "metadata", None), dict)
+            and p.metadata.get("attack") is False
+        ]
         if len(normal) > 20:
             detector.train(normal)
 

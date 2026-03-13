@@ -86,4 +86,31 @@ class AnomalyDetectorService:
         if not settings.detector.enable_event_aggregation:
             return alerts, []
         events = self.aggregator.aggregate(alerts)
+        self._attach_event_metadata(alerts, events)
         return alerts, events
+
+    @staticmethod
+    def _attach_event_metadata(
+        alerts: List[AnomalyEvent], events: List[AggregatedEvent]
+    ) -> None:
+        if not alerts or not events:
+            return
+
+        epsilon = 1e-6
+        for alert in alerts:
+            node = alert.target_node or alert.source_node
+            for event in events:
+                if alert.anomaly_type != event.anomaly_type:
+                    continue
+                if node and node not in event.involved_ids:
+                    continue
+                if not (
+                    event.first_seen - epsilon
+                    <= alert.timestamp
+                    <= event.last_seen + epsilon
+                ):
+                    continue
+
+                alert.event_id = event.event_id
+                alert.packet_count = event.packet_count
+                break

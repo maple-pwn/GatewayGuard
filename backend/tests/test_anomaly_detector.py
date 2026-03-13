@@ -54,6 +54,8 @@ class TestProfileFirstAnomalyDetectorService:
         assert len(alerts) >= 1
         assert len(events) >= 1
         assert events[0].packet_count >= 1
+        assert any(a.event_id is not None for a in alerts)
+        assert any((a.packet_count or 0) >= 1 for a in alerts)
 
     def test_alerts_sorted_by_confidence_desc(self):
         self.service.train(_baseline_packets())
