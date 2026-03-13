@@ -25,6 +25,7 @@ def _create_source(mode: str) -> DataSource:
     cfg = settings.sources
     if mode == "can":
         from app.sources.can_source import CANSource
+
         return CANSource(
             interface=cfg.can.interface,
             channel=cfg.can.channel,
@@ -33,15 +34,18 @@ def _create_source(mode: str) -> DataSource:
         )
     elif mode == "ethernet":
         from app.sources.ethernet_source import EthernetSource
+
         return EthernetSource(
             interface=cfg.ethernet.interface,
             bpf_filter=cfg.ethernet.filter,
         )
     elif mode == "pcap":
         from app.sources.pcap_source import PcapSource
+
         return PcapSource(file_path=cfg.pcap.file_path)
     elif mode == "simulator":
         from app.sources.simulator_source import SimulatorSource
+
         return SimulatorSource(scenario="normal", count=200)
     else:
         raise ValueError(f"Unknown source mode: {mode}")
@@ -141,10 +145,13 @@ class CollectorService:
                     asyncio.create_task(self._persist_and_detect())
 
                 # 节流广播统计信息（最多 1 次/秒）
-                await ws_manager.broadcast_throttled({
-                    "type": "stats_update",
-                    "data": self.stats,
-                }, min_interval=1.0)
+                await ws_manager.broadcast_throttled(
+                    {
+                        "type": "stats_update",
+                        "data": self.stats,
+                    },
+                    min_interval=1.0,
+                )
 
                 await asyncio.sleep(self._interval)
             except asyncio.CancelledError:
@@ -173,16 +180,14 @@ class CollectorService:
                     destination=p.destination,
                     msg_id=p.msg_id,
                     payload=bytes.fromhex(p.payload_hex) if p.payload_hex else b"",
-                    payload_decoded=json.dumps(
-                        p.payload_decoded, ensure_ascii=False
-                    ),
+                    payload_decoded=json.dumps(p.payload_decoded, ensure_ascii=False),
                     domain=p.domain,
                     metadata_json=json.dumps(p.metadata, ensure_ascii=False),
                 )
                 db.add(orm)
             await db.commit()
 
-            if not self._detector.ml_detector.is_fitted:
+            if not self._detector.iforest_detector.is_fitted:
                 normal = [pk for pk in packets if not pk.metadata.get("attack")]
                 if len(normal) > 20:
                     self._detector.train(normal)
@@ -208,30 +213,35 @@ class CollectorService:
             if alerts:
                 logger.info(
                     "Detected %d anomalies from %d packets",
-                    len(alerts), len(packets),
+                    len(alerts),
+                    len(packets),
                 )
-                await ws_manager.broadcast({
-                    "type": "alerts",
-                    "data": [
-                        {
-                            "anomaly_type": a.anomaly_type,
-                            "severity": a.severity,
-                            "confidence": a.confidence,
-                            "protocol": a.protocol,
-                            "source_node": a.source_node,
-                            "description": a.description,
-                            "detection_method": a.detection_method,
-                            "timestamp": a.timestamp,
-                        }
-                        for a in alerts
-                    ],
-                })
+                await ws_manager.broadcast(
+                    {
+                        "type": "alerts",
+                        "data": [
+                            {
+                                "anomaly_type": a.anomaly_type,
+                                "severity": a.severity,
+                                "confidence": a.confidence,
+                                "protocol": a.protocol,
+                                "source_node": a.source_node,
+                                "description": a.description,
+                                "detection_method": a.detection_method,
+                                "timestamp": a.timestamp,
+                            }
+                            for a in alerts
+                        ],
+                    }
+                )
 
             # 检测完成后推送最新统计
-            await ws_manager.broadcast({
-                "type": "stats_update",
-                "data": self.stats,
-            })
+            await ws_manager.broadcast(
+                {
+                    "type": "stats_update",
+                    "data": self.stats,
+                }
+            )
 
 
 # 全局单例
