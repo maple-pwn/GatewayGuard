@@ -17,6 +17,7 @@ from app.services.detectors.id_behavior_detector import IDBehaviorDetector
 from app.services.detectors.timing_profile_detector import TimingProfileDetector
 from app.services.detectors.payload_profile_detector import PayloadProfileDetector
 from app.services.detectors.iforest_aux_detector import IForestAuxDetector
+from app.services.detectors.bus_load_detector import BusLoadDetector
 from app.services.aggregation.alert_aggregator import AlertAggregator, AggregatedEvent
 
 
@@ -42,6 +43,7 @@ class AnomalyDetectorService:
             contamination=cfg.iforest_contamination,
             enabled=cfg.enable_iforest_aux,
         )
+        self.bus_load_detector = BusLoadDetector()
 
         self.aggregator = AlertAggregator(time_window_ms=cfg.event_window_ms)
         self.is_trained = False
@@ -66,6 +68,7 @@ class AnomalyDetectorService:
             return []
 
         alerts = []
+        alerts.extend(self.bus_load_detector.detect(packets))
         alerts.extend(self.id_detector.detect(packets))
         alerts.extend(self.timing_detector.detect(packets))
 

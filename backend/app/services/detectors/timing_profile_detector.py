@@ -1,4 +1,4 @@
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 from typing import List
 import numpy as np
@@ -58,10 +58,12 @@ class TimingProfileDetector:
     def detect(self, packets: List[UnifiedPacket]) -> List[AnomalyEvent]:
         alerts = []
         states: defaultdict[str, TemporalState] = defaultdict(TemporalState)
+        can_packets: List[UnifiedPacket] = []
 
         for packet in packets:
             if not _is_can_family(packet):
                 continue
+            can_packets.append(packet)
             prof = self.profile_mgr.get_profile(packet.msg_id)
             if not prof:
                 continue
@@ -206,4 +208,118 @@ class TimingProfileDetector:
                     )
                 )
 
+        alerts.extend(self._detect_bus_load_anomaly(can_packets))
         return alerts
+
+    def _detect_bus_load_anomaly(
+        self, can_packets: List[UnifiedPacket]
+    ) -> List[AnomalyEvent]:
+        profile = self.profile_mgr.profile
+        if not profile or profile.time_span <= 0 or profile.total_packets <= 1:
+            return []
+        if len(can_packets) < max(self.window_size * 2, 32):
+            return []
+
+        window_span = max(can_packets[-1].timestamp - can_packets[0].timestamp, 1e-6)
+        current_rate = len(can_packets) / window_span
+        baseline_rate = profile.total_packets / max(profile.time_span, 1e-6)
+
+        id_counts = Counter(p.msg_id for p in can_packets)
+        dominant_id, dominant_count = id_counts.most_common(1)[0]
+        dominant_share = dominant_count / len(can_packets)
+        baseline_top_count = max(
+            (id_prof.packet_count for id_prof in profile.id_profiles.values()),
+            default=0,
+        )
+        baseline_dominant_share = baseline_top_count / max(profile.total_packets, 1)
+
+        current_unique_ratio = len(id_counts) / len(can_packets)
+        baseline_unique_ratio = len(profile.id_profiles) / max(profile.total_packets, 1)
+
+        gaps = [
+            max(can_packets[i].timestamp - can_packets[i - 1].timestamp, 0.0)
+            for i in range(1, len(can_packets))
+        ]
+        positive_gaps = [g for g in gaps if g > 0]
+        gap_median = float(np.median(positive_gaps)) if positive_gaps else 0.0
+        baseline_global_gap = profile.time_span / max(profile.total_packets, 1)
+
+        reasons = []
+        evidence = []
+        score = 0.0
+
+        rate_factor = current_rate / max(baseline_rate, 1e-6)
+        if rate_factor >= 2.5:
+            reasons.append(f"global_rate {rate_factor:.2f}x")
+            evidence.append(
+                {
+                    "rule": "global_bus_rate",
+                    "current_rate": round(current_rate, 3),
+                    "baseline_rate": round(baseline_rate, 3),
+                    "rate_factor": round(rate_factor, 3),
+                }
+            )
+            score = max(score, min(rate_factor / 4.0, 1.0))
+
+        if (
+            dominant_share >= 0.6
+            and dominant_share - baseline_dominant_share >= 0.2
+            and rate_factor >= 1.5
+        ):
+            reasons.append(f"id_share {dominant_id}:{dominant_share:.2f}")
+            evidence.append(
+                {
+                    "rule": "dominant_id_share",
+                    "dominant_id": dominant_id,
+                    "current_share": round(dominant_share, 3),
+                    "baseline_share": round(baseline_dominant_share, 3),
+                }
+            )
+            score = max(score, min(dominant_share + 0.2, 1.0))
+
+        if (
+            baseline_unique_ratio > 0
+            and current_unique_ratio >= baseline_unique_ratio * 2.0
+        ):
+            reasons.append("id_diversity_spike")
+            evidence.append(
+                {
+                    "rule": "unique_id_ratio",
+                    "current_unique_ratio": round(current_unique_ratio, 4),
+                    "baseline_unique_ratio": round(baseline_unique_ratio, 4),
+                }
+            )
+            score = max(score, 0.7)
+
+        if gap_median > 0 and baseline_global_gap > 0:
+            compression = baseline_global_gap / gap_median
+            if compression >= 2.0:
+                reasons.append(f"gap_compression {compression:.2f}x")
+                evidence.append(
+                    {
+                        "rule": "global_gap_compression",
+                        "current_gap_median": round(gap_median, 6),
+                        "baseline_gap_median": round(baseline_global_gap, 6),
+                        "compression_factor": round(compression, 3),
+                    }
+                )
+                score = max(score, min(compression / 4.0, 1.0))
+
+        if not reasons:
+            return []
+
+        return [
+            AnomalyEvent(
+                timestamp=can_packets[-1].timestamp,
+                anomaly_type="bus_load_anomaly",
+                severity="critical" if score >= 0.9 else "high",
+                confidence=round(min(max(score, 0.72), 1.0), 3),
+                protocol="CAN",
+                source_node="CAN_BUS",
+                target_node=dominant_id,
+                description="Bus-level traffic anomaly: " + ", ".join(reasons),
+                detection_method="timing_profile_bus",
+                vehicle_profile=profile.vehicle_name,
+                evidence=evidence,
+            )
+        ]

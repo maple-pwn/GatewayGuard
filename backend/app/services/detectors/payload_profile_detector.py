@@ -28,6 +28,9 @@ class PayloadProfileDetector:
 
             reasons = []
             evidence = []
+            compare_len = min(
+                len(int_bytes), len(prof.byte_min) if prof.byte_min else 0
+            )
 
             counts = defaultdict(int)
             for b in byte_list:
@@ -50,47 +53,28 @@ class PayloadProfileDetector:
                         }
                     )
 
-            if len(int_bytes) > 0 and prof.payload_unique_ratio_mean > 0:
-                unique_ratio = len(set(int_bytes)) / len(int_bytes)
-                if abs(unique_ratio - prof.payload_unique_ratio_mean) > 0.45:
-                    reasons.append("unique_ratio_drift")
+            if (
+                prof.byte_stability_mask
+                and len(prof.byte_stability_mask) == compare_len
+            ):
+                violations = []
+                for idx in range(compare_len):
+                    if prof.byte_stability_mask[idx] and int_bytes[idx] not in (
+                        prof.byte_min[idx],
+                        prof.byte_max[idx],
+                    ):
+                        violations.append(
+                            f"byte[{idx}]=0x{int_bytes[idx]:02x} (expected stable: 0x{prof.byte_min[idx]:02x} or 0x{prof.byte_max[idx]:02x})"
+                        )
+                if violations:
+                    reasons.append(f"stable_byte_violations({len(violations)})")
                     evidence.append(
                         {
-                            "rule": "unique_ratio_drift",
-                            "current_unique_ratio": round(unique_ratio, 4),
-                            "baseline_unique_ratio": round(
-                                prof.payload_unique_ratio_mean, 4
-                            ),
+                            "rule": "byte_stability_violation",
+                            "violations": violations[:5],
+                            "total_violations": len(violations),
                         }
                     )
-
-            compare_len = min(
-                len(int_bytes),
-                len(prof.byte_min),
-                len(prof.byte_max),
-                len(prof.byte_std),
-                len(prof.byte_mean),
-            )
-            for idx in range(compare_len):
-                value = int_bytes[idx]
-                std = max(prof.byte_std[idx], 1.0)
-                margin = max(3.0 * std, 2.0)
-                min_allowed = prof.byte_min[idx] - margin
-                max_allowed = prof.byte_max[idx] + margin
-                if value < min_allowed or value > max_allowed:
-                    reasons.append(f"byte_{idx}_out_of_range")
-                    evidence.append(
-                        {
-                            "rule": "byte_range",
-                            "byte_index": idx,
-                            "value": value,
-                            "min_allowed": round(min_allowed, 2),
-                            "max_allowed": round(max_allowed, 2),
-                            "baseline_mean": round(prof.byte_mean[idx], 3),
-                            "baseline_std": round(prof.byte_std[idx], 3),
-                        }
-                    )
-                    break
 
             if len(unique_bytes) == 1 and len(p.payload_hex) >= 8:
                 byte_val = list(unique_bytes)[0]
@@ -113,6 +97,18 @@ class PayloadProfileDetector:
                 )
 
             if reasons:
+                evidence.insert(
+                    0,
+                    {
+                        "rule": "byte_profile_context",
+                        "observed_payload_bytes": len(int_bytes),
+                        "profiled_byte_dimensions": compare_len,
+                        "baseline_entropy_mean": round(prof.byte_entropy_mean, 4),
+                        "baseline_unique_ratio": round(
+                            prof.payload_unique_ratio_mean, 4
+                        ),
+                    },
+                )
                 severity = "high" if any("0x" in r for r in reasons) else "medium"
                 confidence = min(1.0, 0.55 + 0.1 * len(reasons))
                 alerts.append(
