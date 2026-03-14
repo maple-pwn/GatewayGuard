@@ -35,12 +35,30 @@ async def get_system_status():
 @router.delete("/clear-data")
 async def clear_all_data(db: AsyncSession = Depends(get_db)):
     """清空所有数据库数据"""
-    tables = ["chat_history", "analysis_reports", "anomaly_events", "packets"]
+    table_statements = {
+        "chat_history": {
+            "count": text("SELECT COUNT(*) FROM chat_history"),
+            "delete": text("DELETE FROM chat_history"),
+        },
+        "analysis_reports": {
+            "count": text("SELECT COUNT(*) FROM analysis_reports"),
+            "delete": text("DELETE FROM analysis_reports"),
+        },
+        "anomaly_events": {
+            "count": text("SELECT COUNT(*) FROM anomaly_events"),
+            "delete": text("DELETE FROM anomaly_events"),
+        },
+        "packets": {
+            "count": text("SELECT COUNT(*) FROM packets"),
+            "delete": text("DELETE FROM packets"),
+        },
+    }
+
     counts = {}
-    for table in tables:
-        result = await db.execute(text(f"SELECT COUNT(*) FROM {table}"))
+    for table, statements in table_statements.items():
+        result = await db.execute(statements["count"])
         counts[table] = result.scalar()
-        await db.execute(text(f"DELETE FROM {table}"))
+        await db.execute(statements["delete"])
     await db.commit()
     return {"cleared": counts, "message": "所有数据已清空"}
 
@@ -56,7 +74,7 @@ async def clear_packets_partial(
     count_q = select(func.count()).select_from(PacketORM)
     if protocol:
         count_q = count_q.where(PacketORM.protocol == protocol.upper())
-    before = (await db.execute(count_q)).scalar()
+    before = int((await db.execute(count_q)).scalar() or 0)
 
     if keep_recent and keep_recent > 0:
         # 找到第N条的id作为分界线
@@ -82,9 +100,9 @@ async def clear_packets_partial(
 
     await db.commit()
 
-    after = (await db.execute(
-        select(func.count()).select_from(PacketORM)
-    )).scalar()
+    after = int(
+        (await db.execute(select(func.count()).select_from(PacketORM))).scalar() or 0
+    )
 
     return {
         "deleted": before - after,
@@ -95,7 +113,9 @@ async def clear_packets_partial(
 
 @router.delete("/clear-anomalies")
 async def clear_anomalies_partial(
-    severity: Optional[str] = Query(None, description="按严重程度删除: critical/high/medium/low"),
+    severity: Optional[str] = Query(
+        None, description="按严重程度删除: critical/high/medium/low"
+    ),
     keep_recent: Optional[int] = Query(None, description="只保留最近N条"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -103,7 +123,7 @@ async def clear_anomalies_partial(
     count_q = select(func.count()).select_from(AnomalyEventORM)
     if severity:
         count_q = count_q.where(AnomalyEventORM.severity == severity)
-    before = (await db.execute(count_q)).scalar()
+    before = int((await db.execute(count_q)).scalar() or 0)
 
     if keep_recent and keep_recent > 0:
         cutoff_q = (
@@ -128,9 +148,10 @@ async def clear_anomalies_partial(
 
     await db.commit()
 
-    after = (await db.execute(
-        select(func.count()).select_from(AnomalyEventORM)
-    )).scalar()
+    after = int(
+        (await db.execute(select(func.count()).select_from(AnomalyEventORM))).scalar()
+        or 0
+    )
 
     return {
         "deleted": before - after,
