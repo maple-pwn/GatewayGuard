@@ -187,17 +187,18 @@ class CollectorService:
                 db.add(orm)
             await db.commit()
 
-            if not self._detector.iforest_detector.is_fitted:
-                normal = [
-                    pk
-                    for pk in packets
-                    if isinstance(getattr(pk, "metadata", None), dict)
-                    and pk.metadata.get("attack") is False
-                ]
-                if len(normal) > 20:
-                    self._detector.train(normal)
+            if not self._detector.is_trained:
+                logger.debug(
+                    "Skip auto detect for untrained detector; explicit training is required"
+                )
+                alerts = []
+                events = []
+            elif settings.detector.enable_event_aggregation:
+                alerts, events = self._detector.detect_with_aggregation(packets)
+            else:
+                alerts = self._detector.detect(packets)
+                events = []
 
-            alerts = self._detector.detect(packets)
             for a in alerts:
                 orm = AnomalyEventORM(
                     timestamp=a.timestamp,
@@ -210,6 +211,35 @@ class CollectorService:
                     description=a.description,
                     detection_method=a.detection_method,
                     status="open",
+                    event_id=a.event_id,
+                    packet_count=a.packet_count,
+                    vehicle_profile=a.vehicle_profile,
+                    evidence=json.dumps(a.evidence, ensure_ascii=False)
+                    if a.evidence
+                    else None,
+                )
+                db.add(orm)
+
+            for e in events:
+                orm = AnomalyEventORM(
+                    timestamp=e.first_seen,
+                    anomaly_type=e.anomaly_type,
+                    severity=e.severity,
+                    confidence=e.confidence,
+                    protocol="CAN",
+                    source_node=e.involved_ids[0] if e.involved_ids else "",
+                    target_node=",".join(e.involved_ids),
+                    description=(
+                        f"Aggregated {e.anomaly_type} event covering {e.packet_count} alerts"
+                    ),
+                    detection_method="event_aggregation",
+                    status="open",
+                    event_id=e.event_id,
+                    packet_count=e.packet_count,
+                    vehicle_profile=settings.detector.vehicle_profile,
+                    evidence=json.dumps(
+                        {"involved_ids": e.involved_ids}, ensure_ascii=False
+                    ),
                 )
                 db.add(orm)
             await db.commit()

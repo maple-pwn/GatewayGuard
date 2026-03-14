@@ -16,7 +16,6 @@ async def client():
 
 
 class TestRootAPI:
-
     @pytest.mark.asyncio
     async def test_root(self, client):
         resp = await client.get("/")
@@ -26,7 +25,6 @@ class TestRootAPI:
 
 
 class TestTrafficAPI:
-
     @pytest.mark.asyncio
     async def test_get_stats(self, client):
         resp = await client.get("/api/traffic/stats")
@@ -54,7 +52,6 @@ class TestTrafficAPI:
 
 
 class TestCollectorAPI:
-
     @pytest.mark.asyncio
     async def test_collect_status(self, client):
         resp = await client.get("/api/traffic/collect/status")
@@ -74,7 +71,6 @@ class TestCollectorAPI:
 
 
 class TestAnomalyAPI:
-
     @pytest.mark.asyncio
     async def test_get_events_empty(self, client):
         resp = await client.get("/api/anomaly/events")
@@ -88,3 +84,16 @@ class TestAnomalyAPI:
         assert resp.status_code == 200
         data = resp.json()
         assert "detected" in data
+
+    @pytest.mark.asyncio
+    async def test_detect_requires_explicit_training(self, client):
+        await client.post("/api/traffic/simulate?scenario=mixed&count=50")
+
+        resp = await client.post("/api/anomaly/detect?limit=100&with_aggregation=true")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["detected"] == 0
+        assert data["events"] == 0
+        assert data["aggregated_events"] == []
+        assert "not trained" in data["message"].lower()

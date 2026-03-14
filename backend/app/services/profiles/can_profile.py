@@ -32,7 +32,18 @@ class IDProfile:
     payload_constant_ratio: float = 0.0
     payload_zero_ff_ratio: float = 0.0
     byte_stability_mask: List[bool] = field(default_factory=list)
+    byte_min: List[int] = field(default_factory=list)
+    byte_max: List[int] = field(default_factory=list)
+    byte_mean: List[float] = field(default_factory=list)
+    byte_std: List[float] = field(default_factory=list)
+    byte_entropy_mean: float = 0.0
+    byte_entropy_std: float = 0.0
+    payload_unique_ratio_mean: float = 0.0
     repeat_ratio: float = 0.0
+    payload_change_mean: float = 0.0
+    payload_change_std: float = 0.0
+    value_delta_mean: float = 0.0
+    value_delta_std: float = 0.0
     is_common: bool = False
 
 
@@ -95,19 +106,61 @@ class ProfileManager:
 
             const_count = 0
             zero_ff_count = 0
+            entropy_values: List[float] = []
+            unique_ratio_values: List[float] = []
+            payload_bytes_series: List[List[int]] = []
             for payload in data["payloads"]:
                 if not payload or len(payload) < 2:
                     continue
                 bytes_list = [
                     payload[i : i + 2].lower() for i in range(0, len(payload), 2)
                 ]
+                int_bytes = [int(b, 16) for b in bytes_list]
+                payload_bytes_series.append(int_bytes)
+
                 if len(set(bytes_list)) == 1:
                     const_count += 1
                     if bytes_list[0] in ("00", "ff"):
                         zero_ff_count += 1
 
+                unique_ratio_values.append(len(set(bytes_list)) / len(bytes_list))
+
+                counts = defaultdict(int)
+                for b in bytes_list:
+                    counts[b] += 1
+                total = len(bytes_list)
+                probs = [c / total for c in counts.values()]
+                entropy = -sum(p * np.log2(p) for p in probs if p > 0)
+                entropy_values.append(float(entropy))
+
             id_prof.payload_constant_ratio = const_count / count if count > 0 else 0.0
             id_prof.payload_zero_ff_ratio = zero_ff_count / count if count > 0 else 0.0
+            if entropy_values:
+                id_prof.byte_entropy_mean = float(np.mean(entropy_values))
+                id_prof.byte_entropy_std = float(np.std(entropy_values))
+            if unique_ratio_values:
+                id_prof.payload_unique_ratio_mean = float(np.mean(unique_ratio_values))
+
+            if payload_bytes_series:
+                max_len = max(len(v) for v in payload_bytes_series)
+                stable_mask: List[bool] = []
+                for idx in range(max_len):
+                    position_values = [
+                        v[idx] for v in payload_bytes_series if len(v) > idx
+                    ]
+                    if not position_values:
+                        id_prof.byte_min.append(0)
+                        id_prof.byte_max.append(255)
+                        id_prof.byte_mean.append(0.0)
+                        id_prof.byte_std.append(0.0)
+                        stable_mask.append(False)
+                        continue
+                    id_prof.byte_min.append(int(min(position_values)))
+                    id_prof.byte_max.append(int(max(position_values)))
+                    id_prof.byte_mean.append(float(np.mean(position_values)))
+                    id_prof.byte_std.append(float(np.std(position_values)))
+                    stable_mask.append(len(set(position_values)) <= 2)
+                id_prof.byte_stability_mask = stable_mask
 
             if len(data["payloads"]) > 1:
                 repeat_count = sum(
@@ -116,6 +169,34 @@ class ProfileManager:
                     if data["payloads"][i] == data["payloads"][i - 1]
                 )
                 id_prof.repeat_ratio = repeat_count / (len(data["payloads"]) - 1)
+
+            if len(payload_bytes_series) > 1:
+                payload_change_values: List[float] = []
+                value_delta_values: List[float] = []
+                for i in range(1, len(payload_bytes_series)):
+                    prev_b = payload_bytes_series[i - 1]
+                    curr_b = payload_bytes_series[i]
+                    compare_len = min(len(prev_b), len(curr_b))
+                    if compare_len <= 0:
+                        continue
+                    changed = sum(
+                        1 for j in range(compare_len) if prev_b[j] != curr_b[j]
+                    )
+                    payload_change_values.append(changed / compare_len)
+                    prev_word = (
+                        ((prev_b[0] << 8) | prev_b[1]) if len(prev_b) >= 2 else 0
+                    )
+                    curr_word = (
+                        ((curr_b[0] << 8) | curr_b[1]) if len(curr_b) >= 2 else 0
+                    )
+                    value_delta_values.append(abs(curr_word - prev_word) / 65535.0)
+
+                if payload_change_values:
+                    id_prof.payload_change_mean = float(np.mean(payload_change_values))
+                    id_prof.payload_change_std = float(np.std(payload_change_values))
+                if value_delta_values:
+                    id_prof.value_delta_mean = float(np.mean(value_delta_values))
+                    id_prof.value_delta_std = float(np.std(value_delta_values))
 
             profile.id_profiles[msg_id] = id_prof
             if id_prof.is_common:

@@ -130,21 +130,27 @@ async def trigger_detection(
             )
         )
 
-    if not detector.is_trained:
-        normal = [
-            p
-            for p in packets
-            if isinstance(getattr(p, "metadata", None), dict)
-            and p.metadata.get("attack") is False
-        ]
-        if len(normal) > 20:
-            detector.train(normal)
-
     effective_with_aggregation = (
         settings.detector.enable_event_aggregation
         if with_aggregation is None
         else with_aggregation
     )
+
+    packets.reverse()
+
+    if not detector.is_trained:
+        if effective_with_aggregation:
+            return {
+                "detected": 0,
+                "events": 0,
+                "aggregated_events": [],
+                "message": "Detector is not trained. Use explicit training flow first.",
+            }
+        return {
+            "detected": 0,
+            "alerts": [],
+            "message": "Detector is not trained. Use explicit training flow first.",
+        }
 
     if effective_with_aggregation:
         alerts, events = detector.detect_with_aggregation(packets)
@@ -164,6 +170,29 @@ async def trigger_detection(
                 packet_count=a.packet_count,
             )
             db.add(orm)
+
+        for e in events:
+            evidence = json.dumps({"involved_ids": e.involved_ids}, ensure_ascii=False)
+            aggregated_orm = AnomalyEventORM(
+                timestamp=e.first_seen,
+                anomaly_type=e.anomaly_type,
+                severity=e.severity,
+                confidence=e.confidence,
+                protocol="CAN",
+                source_node=e.involved_ids[0] if e.involved_ids else "",
+                target_node=",".join(e.involved_ids),
+                description=(
+                    f"Aggregated {e.anomaly_type} event covering {e.packet_count} alerts"
+                ),
+                detection_method="event_aggregation",
+                status="open",
+                event_id=e.event_id,
+                packet_count=e.packet_count,
+                vehicle_profile=settings.detector.vehicle_profile,
+                evidence=evidence,
+            )
+            db.add(aggregated_orm)
+
         await db.commit()
         return {
             "detected": len(alerts),
