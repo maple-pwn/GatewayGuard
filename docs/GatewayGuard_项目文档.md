@@ -1798,7 +1798,7 @@ GatewayGuard后端基于FastAPI框架，提供四组RESTful API和一个WebSocke
 }
 ```
 
-#### GET /api/anomaly/events/{event_id}
+#### GET /api/anomaly/events/{id}
 
 获取单个异常事件的详细信息。
 
@@ -2199,4 +2199,3 @@ class TestTrafficAPI:
         assert resp.status_code == 200
         assert resp.json()["anomaly_count"] > 0
 ```
-

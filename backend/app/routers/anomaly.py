@@ -152,15 +152,13 @@ async def get_anomaly_events(
     }
 
 
-@router.get("/events/{event_id}")
+@router.get("/events/{id}")
 async def get_anomaly_event_detail(
-    event_id: int,
+    id: int,
     db: AsyncSession = Depends(get_db),
 ):
     """获取异常事件详情"""
-    result = await db.execute(
-        select(AnomalyEventORM).where(AnomalyEventORM.id == event_id)
-    )
+    result = await db.execute(select(AnomalyEventORM).where(AnomalyEventORM.id == id))
     row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Event not found")
