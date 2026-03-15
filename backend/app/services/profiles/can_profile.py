@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 import numpy as np
 from app.models.packet import UnifiedPacket
 
@@ -59,7 +59,7 @@ class CANProfile:
 class ProfileManager:
     def __init__(self, min_packets_for_common: int = 10):
         self.min_packets = min_packets_for_common
-        self.profile: CANProfile | None = None
+        self.profile: Optional[CANProfile] = None
 
     def learn_from_normal(
         self, packets: List[UnifiedPacket], vehicle_name: str = "default"
@@ -204,7 +204,7 @@ class ProfileManager:
 
         self.profile = profile
 
-    def get_profile(self, msg_id: str) -> IDProfile | None:
+    def get_profile(self, msg_id: str) -> Optional[IDProfile]:
         if not self.profile:
             return None
         return self.profile.id_profiles.get(msg_id)

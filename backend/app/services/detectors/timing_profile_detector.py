@@ -1,6 +1,6 @@
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 import numpy as np
 from app.models.packet import UnifiedPacket
 from app.models.anomaly import AnomalyEvent
@@ -31,9 +31,9 @@ def _payload_change_ratio(current: List[int], previous: List[int]) -> float:
 
 @dataclass
 class TemporalState:
-    prev_ts: float | None = None
-    prev_payload: List[int] | None = None
-    prev_word: int | None = None
+    prev_ts: Optional[float] = None
+    prev_payload: Optional[List[int]] = None
+    prev_word: Optional[int] = None
     gaps: deque = field(default_factory=lambda: deque(maxlen=8))
     payload_changes: deque = field(default_factory=lambda: deque(maxlen=8))
     value_deltas: deque = field(default_factory=lambda: deque(maxlen=8))
