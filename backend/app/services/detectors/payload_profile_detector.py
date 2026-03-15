@@ -76,6 +76,40 @@ class PayloadProfileDetector:
                         }
                     )
 
+            if prof.byte_mean and prof.byte_std and len(prof.byte_mean) == compare_len:
+                range_violations = []
+                for idx in range(compare_len):
+                    if prof.byte_std[idx] > 1e-6:
+                        lower = prof.byte_mean[idx] - 3 * prof.byte_std[idx]
+                        upper = prof.byte_mean[idx] + 3 * prof.byte_std[idx]
+                        if not (lower <= int_bytes[idx] <= upper):
+                            range_violations.append(
+                                f"byte[{idx}]=0x{int_bytes[idx]:02x} outside [0x{int(lower):02x}, 0x{int(upper):02x}]"
+                            )
+                if range_violations:
+                    reasons.append(f"byte_range_violations({len(range_violations)})")
+                    evidence.append(
+                        {
+                            "rule": "byte_statistical_range",
+                            "violations": range_violations[:5],
+                            "total_violations": len(range_violations),
+                        }
+                    )
+
+            unique_ratio = len(unique_bytes) / len(byte_list) if byte_list else 0.0
+            if prof.payload_unique_ratio_mean > 0:
+                ratio_diff = abs(unique_ratio - prof.payload_unique_ratio_mean)
+                if ratio_diff >= 0.3:
+                    reasons.append(f"unique_ratio_drift({ratio_diff:.2f})")
+                    evidence.append(
+                        {
+                            "rule": "payload_unique_ratio_drift",
+                            "current_ratio": round(unique_ratio, 4),
+                            "baseline_ratio": round(prof.payload_unique_ratio_mean, 4),
+                            "drift": round(ratio_diff, 4),
+                        }
+                    )
+
             if len(unique_bytes) == 1 and len(p.payload_hex) >= 8:
                 byte_val = list(unique_bytes)[0]
 

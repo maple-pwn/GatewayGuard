@@ -30,10 +30,13 @@ class TestProfileFirstAnomalyDetectorService:
     def setup_method(self):
         self.service = AnomalyDetectorService()
 
-    def test_detect_without_training_returns_empty(self):
+    def test_detect_without_training_raises_error(self):
         packets = _baseline_packets()
-        alerts = self.service.detect(packets)
-        assert alerts == []
+        try:
+            self.service.detect(packets)
+            assert False, "Expected RuntimeError"
+        except RuntimeError as e:
+            assert "not trained" in str(e).lower()
 
     def test_train_then_detect_unknown_can_id(self):
         self.service.train(_baseline_packets())

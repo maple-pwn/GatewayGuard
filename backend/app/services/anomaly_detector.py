@@ -17,7 +17,7 @@ from app.services.detectors.id_behavior_detector import IDBehaviorDetector
 from app.services.detectors.timing_profile_detector import TimingProfileDetector
 from app.services.detectors.payload_profile_detector import PayloadProfileDetector
 from app.services.detectors.iforest_aux_detector import IForestAuxDetector
-from app.services.detectors.bus_load_detector import BusLoadDetector
+
 from app.services.aggregation.alert_aggregator import AlertAggregator, AggregatedEvent
 
 
@@ -43,18 +43,30 @@ class AnomalyDetectorService:
             contamination=cfg.iforest_contamination,
             enabled=cfg.enable_iforest_aux,
         )
-        self.bus_load_detector = BusLoadDetector()
 
         self.aggregator = AlertAggregator(time_window_ms=cfg.event_window_ms)
         self.is_trained = False
 
+    def reset(self):
+        """Reset detector state (for testing)"""
+        self.is_trained = False
+        self.profile_mgr = ProfileManager(
+            min_packets_for_common=settings.detector.min_train_packets
+        )
+        self.aggregator = AlertAggregator(
+            time_window_ms=settings.detector.event_window_ms
+        )
+
     def train(self, normal_packets: List[UnifiedPacket]):
-        """Train Profile-First detectors"""
+        """Train Profile-First detectors - packets must be chronologically sorted"""
         if len(normal_packets) < settings.detector.min_train_packets:
             return
 
+        # Verify chronological order
+        sorted_packets = sorted(normal_packets, key=lambda p: p.timestamp)
+
         self.profile_mgr.learn_from_normal(
-            normal_packets, vehicle_name=settings.detector.vehicle_profile
+            sorted_packets, vehicle_name=settings.detector.vehicle_profile
         )
 
         if settings.detector.enable_iforest_aux:
@@ -65,10 +77,11 @@ class AnomalyDetectorService:
     def detect(self, packets: List[UnifiedPacket]) -> List[AnomalyEvent]:
         """Execute detection - returns packet-level alerts"""
         if not self.is_trained:
-            return []
+            raise RuntimeError(
+                "Detector not trained. Call train() first or use POST /api/anomaly/train"
+            )
 
         alerts = []
-        alerts.extend(self.bus_load_detector.detect(packets))
         alerts.extend(self.id_detector.detect(packets))
         alerts.extend(self.timing_detector.detect(packets))
 

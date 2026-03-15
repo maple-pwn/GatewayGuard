@@ -235,18 +235,10 @@ async def trigger_detection(
     )
 
     if not detector.is_trained:
-        if effective_with_aggregation:
-            return {
-                "detected": 0,
-                "events": 0,
-                "aggregated_events": [],
-                "message": "Detector is not trained. Use explicit training flow first.",
-            }
-        return {
-            "detected": 0,
-            "alerts": [],
-            "message": "Detector is not trained. Use explicit training flow first.",
-        }
+        raise HTTPException(
+            status_code=428,
+            detail="Detector not trained. Call POST /api/anomaly/train first.",
+        )
 
     if effective_with_aggregation:
         alerts, events = detector.detect_with_aggregation(packets)

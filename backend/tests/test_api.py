@@ -11,6 +11,9 @@ from app.database import init_db
 @pytest_asyncio.fixture
 async def client():
     await init_db()
+    from app.routers.anomaly import detector
+
+    detector.reset()
     transport = ASGITransport(app=cast(Any, app))
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -79,8 +82,9 @@ class TestAnomalyAPI:
 
     @pytest.mark.asyncio
     async def test_detect(self, client):
-        # generate data first
+        # generate data and train first
         await client.post("/api/traffic/simulate?scenario=mixed&count=50")
+        await client.post("/api/anomaly/train?limit=100")
         resp = await client.post("/api/anomaly/detect?limit=100")
         assert resp.status_code == 200
         data = resp.json()
@@ -91,13 +95,9 @@ class TestAnomalyAPI:
         await client.post("/api/traffic/simulate?scenario=mixed&count=50")
 
         resp = await client.post("/api/anomaly/detect?limit=100&with_aggregation=true")
-        assert resp.status_code == 200
+        assert resp.status_code == 428
         data = resp.json()
-
-        assert data["detected"] == 0
-        assert data["events"] == 0
-        assert data["aggregated_events"] == []
-        assert "not trained" in data["message"].lower()
+        assert "not trained" in data["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_train_endpoint(self, client):
