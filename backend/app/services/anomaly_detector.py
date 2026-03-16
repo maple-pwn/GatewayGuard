@@ -2,7 +2,10 @@
 
 Architecture:
 - ProfileManager learns baseline from normal traffic
-- 4 specialized detectors: IDBehavior, TimingProfile, PayloadProfile, IForestAux
+- 7 specialized detectors:
+    Profile-based: IDBehavior, TimingProfile, PayloadProfile, IForestAux
+    Signal-level:  RPMDetector, GearDetector
+    Sequence-level: ReplaySequenceDetector
 - AlertAggregator produces event-level output
 
 Legacy logic preserved in anomaly_detector_old.py
