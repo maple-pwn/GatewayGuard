@@ -72,13 +72,15 @@ class TestProfileFirstAnomalyDetectorService:
 class TestIForestAuxDetector:
     def test_feature_shape_matches_expected_dimensions(self):
         detector = IForestAuxDetector(enabled=False)
-        features = detector._extract_features(_baseline_packets())
-        assert features.shape == (60, 8)
+        features, contexts = detector._extract_features(_baseline_packets())
+        assert features.shape == (60, 15)
+        assert len(contexts) == 60
 
     def test_feature_shape_for_empty_packets(self):
         detector = IForestAuxDetector(enabled=False)
-        features = detector._extract_features([])
-        assert features.shape == (0, 8)
+        features, contexts = detector._extract_features([])
+        assert features.shape == (0, 15)
+        assert contexts == []
 
     def test_byte_entropy_for_uniform_bytes(self):
         assert IForestAuxDetector._byte_entropy("FFFFFFFF") == 0.0
@@ -110,6 +112,25 @@ class TestRPMDetector:
             _make_packet(1.1, "0x0C0", "2FA0000000000000"),
         ]
         alerts = detector.detect(packets)
+        assert any(a.anomaly_type == "rpm_spike" for a in alerts)
+
+    def test_rpm_spike_no_cross_batch_state_by_default(self):
+        from app.services.detectors.rpm_detector import RPMDetector
+
+        detector = RPMDetector(spike_threshold=2000, carry_state=False)
+
+        # First batch last RPM = 1000
+        detector.detect([_make_packet(1.0, "0x0C0", "0FA0000000000000")])
+        # New batch starts at 3000; should not compare with previous batch by default.
+        alerts = detector.detect([_make_packet(2.0, "0x0C0", "2EE0000000000000")])
+        assert not any(a.anomaly_type == "rpm_spike" for a in alerts)
+
+    def test_rpm_spike_with_cross_batch_state_enabled(self):
+        from app.services.detectors.rpm_detector import RPMDetector
+
+        detector = RPMDetector(spike_threshold=1500, carry_state=True)
+        detector.detect([_make_packet(1.0, "0x0C0", "0FA0000000000000")])  # 1000 RPM
+        alerts = detector.detect([_make_packet(2.0, "0x0C0", "2EE0000000000000")])  # 3000 RPM
         assert any(a.anomaly_type == "rpm_spike" for a in alerts)
 
 
@@ -314,4 +335,3 @@ class TestDetectorIntegration:
         if len(alerts) > 0:
             assert alerts[0].detection_method is not None
             assert "replay" in alerts[0].detection_method.lower()
-

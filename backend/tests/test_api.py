@@ -1,11 +1,13 @@
 """FastAPI 路由集成测试"""
 
+import time
 import pytest
 import pytest_asyncio
 from typing import Any, cast
 from httpx import AsyncClient, ASGITransport
 from app.main import app
-from app.database import init_db
+from app.database import init_db, async_session
+from app.models.anomaly import AnomalyEventORM
 
 
 @pytest_asyncio.fixture
@@ -123,3 +125,78 @@ class TestAnomalyAPI:
         assert resp.status_code == 404
         data = resp.json()
         assert data["detail"] == "Event not found"
+
+
+async def _insert_event_for_llm() -> int:
+    async with async_session() as session:
+        event = AnomalyEventORM(
+            timestamp=time.time(),
+            anomaly_type="unit_test",
+            severity="low",
+            confidence=0.5,
+            protocol="CAN",
+            source_node="TEST_SRC",
+            target_node="0x100",
+            description="llm route test event",
+            detection_method="unit_test",
+            status="open",
+        )
+        session.add(event)
+        await session.commit()
+        await session.refresh(event)
+        return int(event.id)
+
+
+class TestLLMAPI:
+    @pytest.mark.asyncio
+    async def test_analyze_not_found_returns_404(self, client):
+        resp = await client.post("/api/llm/analyze?event_id=99999999")
+        assert resp.status_code == 404
+        data = resp.json()
+        assert data["detail"] == "Event not found"
+
+    @pytest.mark.asyncio
+    async def test_analyze_upstream_failure_returns_503(self, client, monkeypatch):
+        from app.routers import llm as llm_router
+
+        event_id = await _insert_event_for_llm()
+
+        async def _fail(*args, **kwargs):
+            raise RuntimeError("llm unavailable")
+
+        monkeypatch.setattr(llm_router.llm, "analyze_anomaly", _fail)
+        resp = await client.post(f"/api/llm/analyze?event_id={event_id}")
+
+        assert resp.status_code == 503
+        data = resp.json()
+        assert data["detail"] == "LLM service unavailable"
+
+    @pytest.mark.asyncio
+    async def test_report_upstream_failure_returns_503(self, client, monkeypatch):
+        from app.routers import llm as llm_router
+
+        await _insert_event_for_llm()
+
+        async def _fail(*args, **kwargs):
+            raise RuntimeError("llm unavailable")
+
+        monkeypatch.setattr(llm_router.llm, "generate_report", _fail)
+        resp = await client.post("/api/llm/report?limit=5")
+
+        assert resp.status_code == 503
+        data = resp.json()
+        assert data["detail"] == "LLM service unavailable"
+
+    @pytest.mark.asyncio
+    async def test_chat_upstream_failure_returns_503(self, client, monkeypatch):
+        from app.routers import llm as llm_router
+
+        async def _fail(*args, **kwargs):
+            raise RuntimeError("llm unavailable")
+
+        monkeypatch.setattr(llm_router.llm, "chat", _fail)
+        resp = await client.post("/api/llm/chat?message=hello")
+
+        assert resp.status_code == 503
+        data = resp.json()
+        assert data["detail"] == "LLM service unavailable"

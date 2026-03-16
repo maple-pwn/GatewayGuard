@@ -4,7 +4,7 @@ import json
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +29,7 @@ async def analyze_event(
     )
     row = result.scalar_one_or_none()
     if not row:
-        return {"error": "Event not found"}
+        raise HTTPException(status_code=404, detail="Event not found")
 
     event = AnomalyEvent(
         timestamp=row.timestamp,
@@ -43,7 +43,10 @@ async def analyze_event(
         detection_method=row.detection_method or "",
     )
 
-    analysis = await llm.analyze_anomaly(event)
+    try:
+        analysis = await llm.analyze_anomaly(event)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="LLM service unavailable") from exc
 
     # 保存报告
     report = AnalysisReportORM(
@@ -71,7 +74,7 @@ async def generate_report(
     )
     rows = result.scalars().all()
     if not rows:
-        return {"error": "No anomaly events found"}
+        raise HTTPException(status_code=404, detail="No anomaly events found")
 
     events = [
         AnomalyEvent(
@@ -87,7 +90,10 @@ async def generate_report(
         for r in rows
     ]
 
-    report_data = await llm.generate_report(events)
+    try:
+        report_data = await llm.generate_report(events)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="LLM service unavailable") from exc
 
     report = AnalysisReportORM(
         report_type="alert_report",
@@ -103,7 +109,7 @@ async def generate_report(
 @router.post("/chat")
 async def chat_endpoint(
     message: str,
-    session_id: str = None,
+    session_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """HTTP方式的对话接口"""
@@ -122,20 +128,25 @@ async def chat_endpoint(
     messages.append({"role": "user", "content": message})
 
     # 调用LLM
-    resp = await llm.chat(messages)
+    try:
+        resp = await llm.chat(messages)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="LLM service unavailable") from exc
 
     # 保存对话
+    tool_calls = resp.get("tool_calls")
+    content = resp.get("content", "")
     db.add(ChatHistoryORM(
         session_id=session_id, role="user", content=message,
     ))
     db.add(ChatHistoryORM(
-        session_id=session_id, role="assistant", content=resp["content"],
-        tool_calls=json.dumps(resp["tool_calls"]) if resp["tool_calls"] else None,
+        session_id=session_id, role="assistant", content=content,
+        tool_calls=json.dumps(tool_calls) if tool_calls else None,
     ))
     await db.commit()
 
     return {
         "session_id": session_id,
-        "response": resp["content"],
-        "tool_calls": resp["tool_calls"],
+        "response": content,
+        "tool_calls": tool_calls,
     }

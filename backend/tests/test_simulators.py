@@ -34,6 +34,23 @@ class TestCANSimulator:
         for i in range(1, len(packets)):
             assert packets[i].timestamp >= packets[i - 1].timestamp
 
+    def test_normal_can_rpm_within_reasonable_range(self):
+        packets = generate_normal_can(300, base_time=1000.0)
+        rpm_packets = [p for p in packets if p.msg_id == "0x0C0"]
+        assert len(rpm_packets) > 0
+        for p in rpm_packets:
+            rpm = ((int(p.payload_hex[0:2], 16) << 8) | int(p.payload_hex[2:4], 16)) * 0.25
+            assert 0 <= rpm < 8000
+
+    def test_normal_can_gear_is_valid(self):
+        packets = generate_normal_can(300, base_time=1000.0)
+        gear_packets = [p for p in packets if p.msg_id == "0x130"]
+        assert len(gear_packets) > 0
+        valid_gears = set(range(10))
+        for p in gear_packets:
+            gear_byte = int(p.payload_hex[0:2], 16)
+            assert gear_byte in valid_gears
+
     def test_dos_attack_high_frequency(self):
         packets = generate_dos_attack(100, base_time=1000.0)
         assert len(packets) == 100

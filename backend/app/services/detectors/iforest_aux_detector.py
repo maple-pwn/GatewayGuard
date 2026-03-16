@@ -195,7 +195,7 @@ class IForestAuxDetector:
         self, packets: List[UnifiedPacket]
     ) -> Tuple[np.ndarray, List[Dict[str, float]]]:
         if not packets:
-            return np.array([]).reshape(0, 13), []
+            return np.array([]).reshape(0, 15), []
 
         features = []
         contexts: List[Dict[str, float]] = []

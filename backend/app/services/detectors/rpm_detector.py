@@ -13,10 +13,16 @@ class RPMDetector:
         rpm_can_id: str = "0x0C0",
         max_rpm: float = 8000.0,
         spike_threshold: float = 2000.0,
+        carry_state: bool = False,
     ):
         self.rpm_can_id = rpm_can_id
         self.max_rpm = max_rpm
         self.spike_threshold = spike_threshold
+        self.carry_state = carry_state
+        self.last_rpm = None
+
+    def reset(self) -> None:
+        """Reset cross-batch state."""
         self.last_rpm = None
 
     def _decode_rpm(self, payload_hex: str) -> float:
@@ -33,6 +39,7 @@ class RPMDetector:
     def detect(self, packets: List[UnifiedPacket]) -> List[AnomalyEvent]:
         """Detect RPM anomalies."""
         anomalies = []
+        prev_rpm = self.last_rpm if self.carry_state else None
         for packet in packets:
             if packet.msg_id != self.rpm_can_id or not packet.payload_hex:
                 continue
@@ -40,7 +47,7 @@ class RPMDetector:
             rpm = self._decode_rpm(packet.payload_hex)
 
             # Out-of-range check
-            if rpm > self.max_rpm:
+            if rpm >= self.max_rpm:
                 anomalies.append(
                     AnomalyEvent(
                         timestamp=packet.timestamp,
@@ -54,8 +61,8 @@ class RPMDetector:
                 )
 
             # Spike detection
-            if self.last_rpm is not None:
-                delta = abs(rpm - self.last_rpm)
+            if prev_rpm is not None:
+                delta = abs(rpm - prev_rpm)
                 if delta > self.spike_threshold:
                     anomalies.append(
                         AnomalyEvent(
@@ -69,5 +76,10 @@ class RPMDetector:
                         )
                     )
 
-            self.last_rpm = rpm
+            prev_rpm = rpm
+
+        if self.carry_state:
+            self.last_rpm = prev_rpm
+        else:
+            self.last_rpm = None
         return anomalies

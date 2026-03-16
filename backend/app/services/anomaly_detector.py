@@ -31,10 +31,11 @@ class AnomalyDetectorService:
     """Profile-First CAN IDS 主服务"""
 
     def __init__(self):
+        self._init_components()
+
+    def _init_components(self) -> None:
         cfg = settings.detector
-
         self.profile_mgr = ProfileManager(min_packets_for_common=cfg.min_train_packets)
-
         self.id_detector = IDBehaviorDetector(
             self.profile_mgr, unknown_id_policy=cfg.unknown_id_policy
         )
@@ -52,19 +53,12 @@ class AnomalyDetectorService:
         self.replay_detector = ReplaySequenceDetector()
         self.rpm_detector = RPMDetector()
         self.gear_detector = GearDetector()
-
         self.aggregator = AlertAggregator(time_window_ms=cfg.event_window_ms)
         self.is_trained = False
 
     def reset(self):
         """Reset detector state (for testing)"""
-        self.is_trained = False
-        self.profile_mgr = ProfileManager(
-            min_packets_for_common=settings.detector.min_train_packets
-        )
-        self.aggregator = AlertAggregator(
-            time_window_ms=settings.detector.event_window_ms
-        )
+        self._init_components()
 
     def train(self, normal_packets: List[UnifiedPacket]):
         """Train Profile-First detectors - packets must be chronologically sorted"""
