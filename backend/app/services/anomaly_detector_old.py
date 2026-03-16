@@ -8,7 +8,7 @@
 from collections import Counter, defaultdict
 from collections import deque
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 
@@ -58,9 +58,9 @@ def _first_word(payload_bytes: List[int]) -> int:
 
 @dataclass
 class TemporalState:
-    prev_ts: float | None = None
-    prev_payload: List[int] | None = None
-    prev_word: int | None = None
+    prev_ts: Optional[float] = None
+    prev_payload: Optional[List[int]] = None
+    prev_word: Optional[int] = None
     gaps: deque[float] = field(default_factory=lambda: deque(maxlen=8))
     payload_changes: deque[float] = field(default_factory=lambda: deque(maxlen=8))
     value_deltas: deque[float] = field(default_factory=lambda: deque(maxlen=8))
