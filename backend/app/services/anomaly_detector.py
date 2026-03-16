@@ -17,6 +17,9 @@ from app.services.detectors.id_behavior_detector import IDBehaviorDetector
 from app.services.detectors.timing_profile_detector import TimingProfileDetector
 from app.services.detectors.payload_profile_detector import PayloadProfileDetector
 from app.services.detectors.iforest_aux_detector import IForestAuxDetector
+from app.services.detectors.replay_sequence_detector import ReplaySequenceDetector
+from app.services.detectors.rpm_detector import RPMDetector
+from app.services.detectors.gear_detector import GearDetector
 
 from app.services.aggregation.alert_aggregator import AlertAggregator, AggregatedEvent
 
@@ -43,6 +46,9 @@ class AnomalyDetectorService:
             contamination=cfg.iforest_contamination,
             enabled=cfg.enable_iforest_aux,
         )
+        self.replay_detector = ReplaySequenceDetector()
+        self.rpm_detector = RPMDetector()
+        self.gear_detector = GearDetector()
 
         self.aggregator = AlertAggregator(time_window_ms=cfg.event_window_ms)
         self.is_trained = False
@@ -90,6 +96,15 @@ class AnomalyDetectorService:
 
         if settings.detector.enable_iforest_aux:
             alerts.extend(self.iforest_detector.detect(packets))
+
+        if settings.detector.enable_replay_detector:
+            alerts.extend(self.replay_detector.detect(packets))
+
+        if settings.detector.enable_rpm_detector:
+            alerts.extend(self.rpm_detector.detect(packets))
+
+        if settings.detector.enable_gear_detector:
+            alerts.extend(self.gear_detector.detect(packets))
 
         alerts.sort(key=lambda a: a.confidence, reverse=True)
         return alerts

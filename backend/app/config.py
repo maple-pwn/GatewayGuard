@@ -33,6 +33,9 @@ class DetectorConfig:
     enable_iforest_aux: bool = False
     enable_event_aggregation: bool = True
     enable_payload_profile: bool = True
+    enable_replay_detector: bool = True
+    enable_rpm_detector: bool = True
+    enable_gear_detector: bool = True
     event_window_ms: float = 1000.0
     min_train_packets: int = 10
     burst_z_threshold: float = 4.0

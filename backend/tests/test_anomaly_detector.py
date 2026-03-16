@@ -85,3 +85,65 @@ class TestIForestAuxDetector:
 
     def test_byte_entropy_for_varied_bytes(self):
         assert IForestAuxDetector._byte_entropy("0102030405") > 0.0
+
+
+class TestRPMDetector:
+    def test_rpm_out_of_range(self):
+        from app.services.detectors.rpm_detector import RPMDetector
+
+        detector = RPMDetector(max_rpm=8000)
+        # RPM = (0x23 << 8 | 0x28) * 0.25 = 9000 * 0.25 = 2250 (within range)
+        # RPM = (0xFF << 8 | 0xFF) * 0.25 = 65535 * 0.25 = 16383.75 (exceeds 8000)
+        packets = [_make_packet(1.0, "0x0C0", "FFFF000000000000")]
+        alerts = detector.detect(packets)
+        assert len(alerts) == 1
+        assert alerts[0].anomaly_type == "rpm_out_of_range"
+
+    def test_rpm_spike(self):
+        from app.services.detectors.rpm_detector import RPMDetector
+
+        detector = RPMDetector(spike_threshold=2000)
+        # First: RPM = (0x0F << 8 | 0xA0) * 0.25 = 4000 * 0.25 = 1000
+        # Second: RPM = (0x2F << 8 | 0xA0) * 0.25 = 12192 * 0.25 = 3048 (spike = 2048)
+        packets = [
+            _make_packet(1.0, "0x0C0", "0FA0000000000000"),
+            _make_packet(1.1, "0x0C0", "2FA0000000000000"),
+        ]
+        alerts = detector.detect(packets)
+        assert any(a.anomaly_type == "rpm_spike" for a in alerts)
+
+
+class TestGearDetector:
+    def test_invalid_gear_state(self):
+        from app.services.detectors.gear_detector import GearDetector
+
+        detector = GearDetector()
+        # Gear byte 0xFF is invalid (valid: P/R/N/D/1-6)
+        packets = [_make_packet(1.0, "0x130", "FF00000000000000")]
+        alerts = detector.detect(packets)
+        assert len(alerts) == 1
+        assert alerts[0].anomaly_type == "invalid_gear_state"
+
+
+class TestReplaySequenceDetector:
+    def test_replay_detection(self):
+        from app.services.detectors.replay_sequence_detector import (
+            ReplaySequenceDetector,
+        )
+
+        detector = ReplaySequenceDetector(window_size=3)
+        # Train with normal packets first
+        training = [_make_packet(0.5, "0x100", "AAAAAAAAAAAAAAAA")]
+        detector.fit(training)
+        # Repeated sequence should trigger replay - need 6 packets:
+        # First 3 build window, next 3 repeat it within 1.0s
+        packets = [
+            _make_packet(1.0, "0x100", "0102030405060708"),
+            _make_packet(1.1, "0x100", "0102030405060708"),
+            _make_packet(1.2, "0x100", "0102030405060708"),
+            _make_packet(1.3, "0x100", "0102030405060708"),
+            _make_packet(1.4, "0x100", "0102030405060708"),
+            _make_packet(1.5, "0x100", "0102030405060708"),
+        ]
+        alerts = detector.detect(packets)
+        assert len(alerts) >= 1
