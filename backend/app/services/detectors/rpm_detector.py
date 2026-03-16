@@ -45,9 +45,11 @@ class RPMDetector:
                     AnomalyEvent(
                         timestamp=packet.timestamp,
                         anomaly_type="rpm_out_of_range",
+                        detection_method="rpm_range_check",
                         severity="high",
                         description=f"RPM {rpm:.1f} exceeds max {self.max_rpm}",
                         confidence=0.95,
+                        evidence=[f"rpm={rpm:.1f}", f"max={self.max_rpm}"],
                     )
                 )
 
@@ -59,9 +61,11 @@ class RPMDetector:
                         AnomalyEvent(
                             timestamp=packet.timestamp,
                             anomaly_type="rpm_spike",
+                            detection_method="rpm_spike_detection",
                             severity="medium",
                             description=f"RPM spike: {delta:.1f} RPM change",
                             confidence=0.85,
+                            evidence=[f"delta={delta:.1f}", f"threshold={self.spike_threshold}"],
                         )
                     )
 

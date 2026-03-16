@@ -78,6 +78,9 @@ class AnomalyDetectorService:
         if settings.detector.enable_iforest_aux:
             self.iforest_detector.fit(normal_packets)
 
+        if settings.detector.enable_replay_detector:
+            self.replay_detector.fit(sorted_packets)
+
         self.is_trained = True
 
     def detect(self, packets: List[UnifiedPacket]) -> List[AnomalyEvent]:

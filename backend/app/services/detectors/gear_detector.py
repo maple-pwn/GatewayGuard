@@ -49,9 +49,11 @@ class GearDetector:
                     AnomalyEvent(
                         timestamp=packet.timestamp,
                         anomaly_type="invalid_gear_state",
+                        detection_method="gear_state_validation",
                         severity="high",
                         description=f"Invalid gear state: {gear}",
                         confidence=0.90,
+                        evidence=[f"gear={gear}", f"valid_gears={','.join(self.VALID_GEARS)}"],
                     )
                 )
 
