@@ -30,17 +30,20 @@ class DetectorConfig:
     iforest_contamination: float = 0.05
     anomaly_window_size: int = 100
     unknown_id_policy: str = "strict_profile"
-    enable_iforest_aux: bool = False
+    enable_iforest_aux: bool = True
     enable_event_aggregation: bool = True
     enable_payload_profile: bool = True
     enable_replay_detector: bool = True
     enable_rpm_detector: bool = True
     enable_gear_detector: bool = True
     event_window_ms: float = 1000.0
+    alert_cooldown_ms: float = 1000.0
     min_train_packets: int = 10
     burst_z_threshold: float = 4.0
     gap_z_threshold: float = 3.0
     temporal_window_size: int = 8
+    rpm_can_id: str = "auto"
+    gear_can_id: str = "auto"
     vehicle_profile: str = "default"
     profile_dir: str = "./profiles"
 

@@ -30,3 +30,6 @@ compare_prev_logic.json
 # OMC
 .omc/
 opencode.json
+
+# Datasets (large binary files)
+datasets/

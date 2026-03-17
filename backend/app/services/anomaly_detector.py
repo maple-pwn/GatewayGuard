@@ -11,7 +11,7 @@ Architecture:
 Legacy logic preserved in anomaly_detector_old.py
 """
 
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 from app.models.packet import UnifiedPacket
 from app.models.anomaly import AnomalyEvent
 from app.config import settings
@@ -23,6 +23,7 @@ from app.services.detectors.iforest_aux_detector import IForestAuxDetector
 from app.services.detectors.replay_sequence_detector import ReplaySequenceDetector
 from app.services.detectors.rpm_detector import RPMDetector
 from app.services.detectors.gear_detector import GearDetector
+from app.services.detectors.powertrain_signal_utils import discover_powertrain_ids
 
 from app.services.aggregation.alert_aggregator import AlertAggregator, AggregatedEvent
 
@@ -72,11 +73,38 @@ class AnomalyDetectorService:
             sorted_packets, vehicle_name=settings.detector.vehicle_profile
         )
 
+        resolved_rpm_id, resolved_gear_id = discover_powertrain_ids(
+            sorted_packets,
+            settings.detector.rpm_can_id,
+            settings.detector.gear_can_id,
+            max_rpm=self.rpm_detector.max_rpm,
+            context_window_s=max(
+                self.rpm_detector.context_window_s,
+                self.gear_detector.context_window_s,
+            ),
+        )
+        self.rpm_detector.rpm_can_id = resolved_rpm_id
+        self.rpm_detector.gear_can_id = resolved_gear_id
+        self.gear_detector.rpm_can_id = resolved_rpm_id
+        self.gear_detector.gear_can_id = resolved_gear_id
+        ignored_payload_ids = set()
+        if settings.detector.enable_rpm_detector and resolved_rpm_id:
+            ignored_payload_ids.add(resolved_rpm_id)
+        if settings.detector.enable_gear_detector and resolved_gear_id:
+            ignored_payload_ids.add(resolved_gear_id)
+        self.payload_detector.ignored_msg_ids = ignored_payload_ids
+
         if settings.detector.enable_iforest_aux:
             self.iforest_detector.fit(normal_packets)
 
         if settings.detector.enable_replay_detector:
             self.replay_detector.fit(sorted_packets)
+
+        if settings.detector.enable_rpm_detector:
+            self.rpm_detector.fit(sorted_packets)
+
+        if settings.detector.enable_gear_detector:
+            self.gear_detector.fit(sorted_packets)
 
         self.is_trained = True
 
@@ -87,25 +115,27 @@ class AnomalyDetectorService:
                 "Detector not trained. Call train() first or use POST /api/anomaly/train"
             )
 
+        sorted_packets = sorted(packets, key=lambda packet: packet.timestamp)
         alerts = []
-        alerts.extend(self.id_detector.detect(packets))
-        alerts.extend(self.timing_detector.detect(packets))
+        alerts.extend(self.id_detector.detect(sorted_packets))
+        alerts.extend(self.timing_detector.detect(sorted_packets))
 
         if settings.detector.enable_payload_profile:
-            alerts.extend(self.payload_detector.detect(packets))
+            alerts.extend(self.payload_detector.detect(sorted_packets))
 
         if settings.detector.enable_iforest_aux:
-            alerts.extend(self.iforest_detector.detect(packets))
+            alerts.extend(self.iforest_detector.detect(sorted_packets))
 
         if settings.detector.enable_replay_detector:
-            alerts.extend(self.replay_detector.detect(packets))
+            alerts.extend(self.replay_detector.detect(sorted_packets))
 
         if settings.detector.enable_rpm_detector:
-            alerts.extend(self.rpm_detector.detect(packets))
+            alerts.extend(self.rpm_detector.detect(sorted_packets))
 
         if settings.detector.enable_gear_detector:
-            alerts.extend(self.gear_detector.detect(packets))
+            alerts.extend(self.gear_detector.detect(sorted_packets))
 
+        alerts = self._cull_duplicate_alerts(alerts)
         alerts.sort(key=lambda a: a.confidence, reverse=True)
         return alerts
 
@@ -145,3 +175,178 @@ class AnomalyDetectorService:
                 alert.event_id = event.event_id
                 alert.packet_count = event.packet_count
                 break
+
+    @staticmethod
+    def _alert_priority(alert: AnomalyEvent) -> Tuple[int, float]:
+        severity_rank = {
+            "critical": 4,
+            "high": 3,
+            "medium": 2,
+            "low": 1,
+        }.get(alert.severity, 0)
+        return severity_rank, alert.confidence
+
+    @staticmethod
+    def _alert_signature(alert: AnomalyEvent) -> str:
+        if alert.anomaly_type == "payload_anomaly":
+            rules = []
+            for item in alert.evidence or []:
+                if not isinstance(item, dict):
+                    continue
+                rule = item.get("rule")
+                if rule and rule != "byte_profile_context":
+                    rules.append(str(rule))
+            if rules:
+                return "|".join(sorted(set(rules)))
+
+        if alert.anomaly_type == "replay_suspected":
+            for item in alert.evidence or []:
+                if isinstance(item, str) and item:
+                    return item
+
+        return ""
+
+    @staticmethod
+    def _alert_cooldown_seconds(base_cooldown_s: float, alert: AnomalyEvent) -> float:
+        multiplier = 1.0
+        if alert.detection_method == "payload_profile":
+            multiplier = AnomalyDetectorService._payload_profile_cooldown_multiplier(
+                alert
+            )
+        elif alert.detection_method == "replay_sequence":
+            multiplier = AnomalyDetectorService._replay_sequence_cooldown_multiplier(
+                alert
+            )
+        elif alert.detection_method == "id_behavior_unknown_flood":
+            multiplier = 0.0
+        elif alert.detection_method == "iforest_auxiliary":
+            multiplier = 1.0
+            for item in alert.evidence or []:
+                if not isinstance(item, dict) or item.get("rule") != "iforest_context":
+                    continue
+                is_unknown = not bool(item.get("known_id", True))
+                burst_signal = bool(item.get("burst_signal", False))
+                zero_ff_flag = bool(item.get("zero_ff_flag", False))
+                repeat_run = int(item.get("repeat_run", 0))
+                id_window_share = float(item.get("id_window_share", 0.0))
+                if burst_signal:
+                    multiplier = 0.1 if is_unknown else 0.25
+                elif is_unknown and zero_ff_flag and (
+                    repeat_run >= 2 or id_window_share >= 0.05
+                ):
+                    multiplier = 0.0
+                elif is_unknown:
+                    multiplier = 0.25
+                else:
+                    multiplier = 1.0
+                break
+        return base_cooldown_s * multiplier
+
+    @staticmethod
+    def _payload_profile_cooldown_multiplier(alert: AnomalyEvent) -> float:
+        multiplier = 10.0
+        baseline_repeat_ratio = None
+        for item in alert.evidence or []:
+            if not isinstance(item, dict) or item.get("rule") != "byte_profile_context":
+                continue
+            baseline_repeat_ratio = float(item.get("baseline_repeat_ratio", 0.0))
+            break
+
+        for item in alert.evidence or []:
+            if not isinstance(item, dict):
+                continue
+
+            rule = item.get("rule")
+            if rule == "constant_payload":
+                return 0.0
+
+            if rule == "byte_stability_violation":
+                total_violations = int(item.get("total_violations", 0))
+                max_deviation = int(item.get("max_deviation", 0))
+                if baseline_repeat_ratio is not None and baseline_repeat_ratio >= 0.8:
+                    continue
+                if total_violations >= 3 or max_deviation >= 24:
+                    return 0.0
+                if total_violations >= 2 and max_deviation >= 12:
+                    multiplier = min(multiplier, 0.02)
+            elif rule == "byte_statistical_range":
+                total_violations = int(item.get("total_violations", 0))
+                max_deviation = float(item.get("max_deviation", 0.0))
+                if baseline_repeat_ratio is not None and baseline_repeat_ratio >= 0.8:
+                    continue
+                if total_violations >= 4 or max_deviation >= 48.0:
+                    return 0.0
+                if (
+                    (total_violations >= 3 and max_deviation >= 20.0)
+                    or (total_violations >= 2 and max_deviation >= 32.0)
+                ):
+                    multiplier = min(multiplier, 0.02)
+            elif rule == "entropy_drift":
+                entropy_z = float(item.get("entropy_z", 0.0))
+                if entropy_z >= 8.0:
+                    multiplier = min(multiplier, 0.05)
+
+        return multiplier
+
+    @staticmethod
+    def _replay_sequence_cooldown_multiplier(alert: AnomalyEvent) -> float:
+        for item in alert.evidence or []:
+            if not isinstance(item, str):
+                continue
+            if item == "exact_payload_reuse":
+                return 0.0
+            if item == "stale_pattern_reuse":
+                return 0.5
+            break
+        return 10.0
+
+    def _cull_duplicate_alerts(
+        self, alerts: List[AnomalyEvent]
+    ) -> List[AnomalyEvent]:
+        if len(alerts) <= 1:
+            return alerts
+
+        cooldown_s = max(settings.detector.alert_cooldown_ms, 0.0) / 1000.0
+        if cooldown_s <= 0:
+            return alerts
+
+        kept: List[AnomalyEvent] = []
+        clusters: Dict[Tuple[str, str, str, str, str], Tuple[int, float]] = {}
+
+        for alert in sorted(alerts, key=lambda item: item.timestamp):
+            node = alert.target_node or alert.source_node or ""
+            signature = self._alert_signature(alert)
+            key = (
+                alert.protocol or "",
+                alert.anomaly_type,
+                alert.detection_method,
+                node,
+                signature,
+            )
+            packet_span = max(alert.packet_count, 1)
+            effective_cooldown_s = self._alert_cooldown_seconds(cooldown_s, alert)
+
+            if key not in clusters:
+                alert.packet_count = packet_span
+                kept.append(alert)
+                clusters[key] = (len(kept) - 1, alert.timestamp)
+                continue
+
+            kept_idx, cluster_last_seen = clusters[key]
+            existing = kept[kept_idx]
+
+            if alert.timestamp - cluster_last_seen > effective_cooldown_s:
+                alert.packet_count = packet_span
+                kept.append(alert)
+                clusters[key] = (len(kept) - 1, alert.timestamp)
+                continue
+
+            combined_count = max(existing.packet_count, 1) + packet_span
+            if self._alert_priority(alert) > self._alert_priority(existing):
+                alert.packet_count = combined_count
+                kept[kept_idx] = alert
+            else:
+                existing.packet_count = combined_count
+            clusters[key] = (kept_idx, alert.timestamp)
+
+        return kept

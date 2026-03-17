@@ -54,6 +54,10 @@ class TimingProfileDetector:
         self.gap_z = gap_z_threshold
         self.load_factor_threshold = 2.0
         self.mad_epsilon = 1e-6
+        self.repeat_spike_min = 0.7
+        self.max_repeat_baseline = 0.09
+        self.min_repeat_payload_change = 0.18
+        self.mad_gap_drop_floor = 3e-4
 
     def detect(self, packets: List[UnifiedPacket]) -> List[AnomalyEvent]:
         alerts = []
@@ -106,8 +110,15 @@ class TimingProfileDetector:
             reasons = []
             evidence = []
             score = 0.0
+            high_signal = False
 
             baseline_gap = max(prof.gap_median, 1e-6)
+            gap_drop = max(baseline_gap - gap_median, 0.0)
+            gap_drop_floor = max(
+                3.0 * prof.gap_std,
+                baseline_gap * 0.08,
+                self.mad_gap_drop_floor,
+            )
             if gap_median > 0:
                 gap_ratio = baseline_gap / gap_median
                 if gap_ratio >= self.burst_z and gap_median <= max(prof.gap_p10, 1e-6):
@@ -121,6 +132,7 @@ class TimingProfileDetector:
                         }
                     )
                     score = max(score, gap_ratio / 6.0)
+                    high_signal = True
 
                 baseline_rate = 1.0 / baseline_gap
                 current_rate = 1.0 / max(gap_median, 1e-6)
@@ -136,34 +148,56 @@ class TimingProfileDetector:
                         }
                     )
                     score = max(score, load_factor / 4.0)
+                    high_signal = True
 
                 if mad > self.mad_epsilon:
                     robust_z = abs(gap_median - baseline_gap) / (1.4826 * mad)
-                    if gap_median < baseline_gap and robust_z >= self.gap_z:
+                    if (
+                        gap_median < baseline_gap
+                        and robust_z >= self.gap_z
+                        and gap_ratio >= 1.08
+                        and gap_drop >= gap_drop_floor
+                    ):
                         reasons.append(f"mad_z {robust_z:.2f}")
                         evidence.append(
                             {
                                 "rule": "robust_gap_mad",
                                 "robust_z": round(robust_z, 3),
                                 "mad": round(mad, 6),
+                                "gap_drop": round(gap_drop, 6),
+                                "gap_drop_floor": round(gap_drop_floor, 6),
                             }
                         )
                         score = max(score, robust_z / 6.0)
+                        high_signal = True
 
-            if repeat_ratio >= 0.85 and repeat_ratio - prof.repeat_ratio >= 0.45:
+            repeat_delta = repeat_ratio - prof.repeat_ratio
+            allow_repeat_stall = (
+                prof.repeat_ratio <= self.max_repeat_baseline
+                and prof.payload_change_mean >= self.min_repeat_payload_change
+            )
+            if (
+                allow_repeat_stall
+                and repeat_ratio >= 0.98
+                and repeat_delta >= self.repeat_spike_min
+            ):
                 reasons.append(f"repeat {repeat_ratio:.2f}")
                 evidence.append(
                     {
                         "rule": "repeat_ratio",
                         "current_repeat": round(repeat_ratio, 3),
                         "baseline_repeat": round(prof.repeat_ratio, 3),
+                        "repeat_delta": round(repeat_delta, 3),
                     }
                 )
                 score = max(score, repeat_ratio)
+                high_signal = True
 
             if (
-                prof.payload_change_mean > 0
-                and payload_change_mean < prof.payload_change_mean * 0.35
+                allow_repeat_stall
+                and repeat_ratio >= 0.98
+                and prof.payload_change_mean >= self.min_repeat_payload_change
+                and payload_change_mean <= min(0.02, prof.payload_change_mean * 0.15)
             ):
                 reasons.append("payload_stall")
                 evidence.append(
@@ -176,8 +210,10 @@ class TimingProfileDetector:
                 score = max(score, 0.7)
 
             if (
-                prof.value_delta_mean > 0
-                and value_delta_mean < prof.value_delta_mean * 0.3
+                allow_repeat_stall
+                and repeat_ratio >= 0.98
+                and prof.value_delta_mean >= 0.08
+                and value_delta_mean < prof.value_delta_mean * 0.2
             ):
                 reasons.append("value_delta_drop")
                 evidence.append(
@@ -189,7 +225,7 @@ class TimingProfileDetector:
                 )
                 score = max(score, 0.65)
 
-            if reasons:
+            if reasons and (high_signal or len(reasons) >= 2):
                 alerts.append(
                     AnomalyEvent(
                         timestamp=packet.timestamp,

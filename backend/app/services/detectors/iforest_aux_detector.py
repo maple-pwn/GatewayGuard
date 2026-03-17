@@ -38,13 +38,8 @@ def _is_zero_ff_constant(payload_hex: str) -> bool:
 
 class IForestAuxDetector:
     def __init__(self, contamination: float = 0.05, enabled: bool = False):
-        from sklearn.ensemble import IsolationForest
-
-        self.model = IsolationForest(
-            contamination=contamination,
-            random_state=42,
-            n_estimators=100,
-        )
+        self.contamination = contamination
+        self.model = None
         self.is_fitted = False
         self.enabled = enabled
         self.score_threshold = -0.02
@@ -58,10 +53,25 @@ class IForestAuxDetector:
         self.id_repeat_baseline: Dict[str, float] = {}
         self.id_zero_ff_baseline: Dict[str, float] = {}
 
+        if self.enabled:
+            self._ensure_model()
+
+    def _ensure_model(self):
+        if self.model is not None:
+            return
+        from sklearn.ensemble import IsolationForest
+
+        self.model = IsolationForest(
+            contamination=self.contamination,
+            random_state=42,
+            n_estimators=100,
+        )
+
     def fit(self, normal_packets: List[UnifiedPacket]):
         if not self.enabled:
             return
 
+        self._ensure_model()
         sorted_packets = sorted(normal_packets, key=lambda packet: packet.timestamp)
         self._learn_baselines(sorted_packets)
         features, _ = self._extract_features(sorted_packets)
@@ -84,13 +94,19 @@ class IForestAuxDetector:
 
         alerts = []
         for i, (score, context) in enumerate(zip(scores, contexts)):
+            known_id = context["known_id"] >= 1.0
             score_trigger = score <= self.score_threshold
             relaxed_unknown_trigger = (
-                context["known_id"] < 1.0 and score <= self.unknown_score_threshold
+                not known_id and score <= self.unknown_score_threshold
             )
             burst_trigger, burst_confidence, reasons = self._burst_signal(context)
 
             if not score_trigger and not relaxed_unknown_trigger and not burst_trigger:
+                continue
+
+            # Known IDs are noisy under score-only IF decisions; require an explicit
+            # burst/flood signature before surfacing them as ML alerts.
+            if known_id and not burst_trigger:
                 continue
 
             packet = packets[i]
@@ -122,6 +138,23 @@ class IForestAuxDetector:
             elif confidence >= 0.6:
                 severity = "medium"
 
+            evidence = [
+                {
+                    "rule": "iforest_context",
+                    "known_id": bool(known_id),
+                    "burst_signal": bool(burst_trigger),
+                    "score_trigger": bool(score_trigger),
+                    "relaxed_unknown_trigger": bool(relaxed_unknown_trigger),
+                    "score": round(float(score), 4),
+                    "gap_ratio": round(float(context["gap_ratio"]), 4),
+                    "id_rate_ratio": round(float(context["id_rate_ratio"]), 4),
+                    "global_rate_ratio": round(float(context["global_rate_ratio"]), 4),
+                    "id_window_share": round(float(context["id_window_share"]), 4),
+                    "repeat_run": int(context["repeat_run"]),
+                    "zero_ff_flag": bool(context["zero_ff_flag"] >= 1.0),
+                }
+            ]
+
             alerts.append(
                 AnomalyEvent(
                     timestamp=packet.timestamp,
@@ -136,6 +169,7 @@ class IForestAuxDetector:
                         + "; ".join(reason_parts[:3])
                     ),
                     detection_method="iforest_auxiliary",
+                    evidence=evidence,
                 )
             )
         return alerts

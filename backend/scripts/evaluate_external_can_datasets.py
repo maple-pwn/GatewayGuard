@@ -806,12 +806,14 @@ def main() -> int:
     )
     parser.add_argument(
         "--enable-iforest-aux",
-        action="store_true",
-        help="Enable the current repo's auxiliary Isolation Forest branch during evaluation.",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable or disable the current repo's auxiliary Isolation Forest branch during evaluation. Defaults to current config.",
     )
     args = parser.parse_args()
 
-    settings.detector.enable_iforest_aux = bool(args.enable_iforest_aux)
+    if args.enable_iforest_aux is not None:
+        settings.detector.enable_iforest_aux = bool(args.enable_iforest_aux)
 
     profiles = build_profiles(
         args.datasets_root,

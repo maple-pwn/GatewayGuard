@@ -53,7 +53,11 @@ class AlertAggregator:
                     first = cluster[0]
                     last = cluster[-1]
                     ids = list(set(a.target_node or a.source_node for a in cluster))
-                    avg_conf = sum(a.confidence for a in cluster) / len(cluster)
+                    total_packets = sum(max(a.packet_count, 1) for a in cluster)
+                    weighted_conf = sum(
+                        a.confidence * max(a.packet_count, 1) for a in cluster
+                    )
+                    avg_conf = weighted_conf / max(total_packets, 1)
                     max_sev = max(
                         cluster,
                         key=lambda a: {
@@ -70,7 +74,7 @@ class AlertAggregator:
                             event_id=f"evt_{event_counter:06d}",
                             first_seen=first.timestamp,
                             last_seen=last.timestamp,
-                            packet_count=len(cluster),
+                            packet_count=total_packets,
                             involved_ids=ids,
                             anomaly_type=anom_type,
                             severity=max_sev,
