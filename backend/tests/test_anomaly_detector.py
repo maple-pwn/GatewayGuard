@@ -1239,6 +1239,184 @@ class TestDetectorIntegration:
         finally:
             settings.detector.alert_cooldown_ms = original_cooldown
 
+    def test_service_shortens_iforest_cooldown_for_known_strong_zero_ff_burst(self):
+        from app.config import settings
+
+        service = AnomalyDetectorService()
+        alerts = [
+            AnomalyEvent(
+                timestamp=6250.0,
+                anomaly_type="ml_auxiliary",
+                severity="high",
+                confidence=0.95,
+                protocol="CAN",
+                target_node="0x000",
+                detection_method="iforest_auxiliary",
+                evidence=[
+                    {
+                        "rule": "iforest_context",
+                        "known_id": True,
+                        "burst_signal": True,
+                        "zero_ff_flag": True,
+                        "repeat_run": 24,
+                        "id_window_share": 0.82,
+                        "global_rate_ratio": 5.4,
+                        "id_rate_ratio": 100.0,
+                        "gap_ratio": 7.5,
+                    }
+                ],
+            ),
+            AnomalyEvent(
+                timestamp=6250.2,
+                anomaly_type="ml_auxiliary",
+                severity="high",
+                confidence=0.96,
+                protocol="CAN",
+                target_node="0x000",
+                detection_method="iforest_auxiliary",
+                evidence=[
+                    {
+                        "rule": "iforest_context",
+                        "known_id": True,
+                        "burst_signal": True,
+                        "zero_ff_flag": True,
+                        "repeat_run": 25,
+                        "id_window_share": 0.83,
+                        "global_rate_ratio": 5.5,
+                        "id_rate_ratio": 100.0,
+                        "gap_ratio": 7.5,
+                    }
+                ],
+            ),
+        ]
+
+        original_cooldown = settings.detector.alert_cooldown_ms
+        try:
+            settings.detector.alert_cooldown_ms = 1000.0
+            culled = service._cull_duplicate_alerts(alerts)
+            assert len(culled) == 2
+        finally:
+            settings.detector.alert_cooldown_ms = original_cooldown
+
+    def test_service_promotes_dense_rpm_semantic_stream_to_ml_channel(self):
+        service = AnomalyDetectorService()
+        alerts = [
+            AnomalyEvent(
+                timestamp=6300.0 + i * 0.001,
+                anomaly_type="rpm_mode_anomaly",
+                severity="high",
+                confidence=0.9,
+                protocol="CAN",
+                target_node="0x316",
+                detection_method="rpm_semantic_profile",
+                evidence=[{"rule": "rpm_mode_profile"}],
+            )
+            for i in range(200)
+        ]
+        alerts.extend(
+            AnomalyEvent(
+                timestamp=6400.0 + i * 0.001,
+                anomaly_type="gear_state_out_of_profile",
+                severity="high",
+                confidence=0.9,
+                protocol="CAN",
+                target_node="0x43F",
+                detection_method="gear_semantic_profile",
+                evidence=[{"rule": "gear_symbolic_components"}],
+            )
+            for i in range(20)
+        )
+
+        promoted = service._promote_profile_ml_alerts(alerts, total_packets=1000)
+
+        rpm_methods = {
+            alert.detection_method
+            for alert in promoted
+            if alert.anomaly_type == "rpm_mode_anomaly"
+        }
+        gear_methods = {
+            alert.detection_method
+            for alert in promoted
+            if alert.anomaly_type == "gear_state_out_of_profile"
+        }
+
+        assert rpm_methods == {"ml_rpm_semantic_profile"}
+        assert gear_methods == {"gear_semantic_profile"}
+
+    def test_service_promotes_dense_timing_stream_when_other_ml_paths_are_sparse(self):
+        service = AnomalyDetectorService()
+        alerts = [
+            AnomalyEvent(
+                timestamp=6500.0 + i * 0.001,
+                anomaly_type="temporal_anomaly",
+                severity="high",
+                confidence=1.0,
+                protocol="CAN",
+                target_node="0x125",
+                detection_method="timing_profile",
+                evidence=[
+                    {
+                        "rule": "burst_ratio",
+                        "gap_ratio": 9.5,
+                    }
+                ],
+            )
+            for i in range(180)
+        ]
+
+        promoted = service._promote_profile_ml_alerts(alerts, total_packets=2000)
+        methods = {alert.detection_method for alert in promoted}
+
+        assert methods == {"ml_timing_profile"}
+
+    def test_service_skips_timing_promotion_when_iforest_is_already_dense(self):
+        service = AnomalyDetectorService()
+        alerts = [
+            AnomalyEvent(
+                timestamp=6600.0 + i * 0.001,
+                anomaly_type="temporal_anomaly",
+                severity="high",
+                confidence=1.0,
+                protocol="CAN",
+                target_node="0x125",
+                detection_method="timing_profile",
+                evidence=[
+                    {
+                        "rule": "robust_gap_mad",
+                        "robust_z": 9.0,
+                    }
+                ],
+            )
+            for i in range(180)
+        ]
+        alerts.extend(
+            AnomalyEvent(
+                timestamp=6700.0 + i * 0.001,
+                anomaly_type="ml_auxiliary",
+                severity="high",
+                confidence=0.8,
+                protocol="CAN",
+                target_node="0x000",
+                detection_method="iforest_auxiliary",
+                evidence=[
+                    {
+                        "rule": "iforest_context",
+                        "known_id": False,
+                        "burst_signal": True,
+                    }
+                ],
+            )
+            for i in range(140)
+        )
+
+        promoted = service._promote_profile_ml_alerts(alerts, total_packets=2000)
+        timing_methods = {
+            alert.detection_method
+            for alert in promoted
+            if alert.anomaly_type == "temporal_anomaly"
+        }
+
+        assert timing_methods == {"timing_profile"}
     def test_service_detects_unknown_id_flood_without_culling(self):
         from app.config import settings
 

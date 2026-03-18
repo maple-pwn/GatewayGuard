@@ -1,0 +1,1409 @@
+{
+  "datasets_root": "E:\\信安大赛\\datasets",
+  "ra8p1_jsonl": null,
+  "ra8p1_csv": null,
+  "train_rows": 100000,
+  "eval_rows": 100000,
+  "enable_iforest_aux": true,
+  "results": [
+    {
+      "dataset": "B-CAN",
+      "case": "normal_eval",
+      "rows": 100000,
+      "attack_rows": 0,
+      "attack_ratio": 0.0,
+      "unique_ids": 180,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 177,
+      "stock_alerts_total": 520,
+      "stock_rule_alerts": 515,
+      "stock_ml_alerts": 5,
+      "alert_types": {
+        "temporal_anomaly": 15,
+        "rpm_out_of_range": 2,
+        "rpm_profile_anomaly": 2,
+        "replay_suspected": 3,
+        "rpm_spike": 8,
+        "ml_auxiliary": 5,
+        "unknown_can_id": 3,
+        "payload_anomaly": 481,
+        "bus_load_anomaly": 1
+      },
+      "alert_methods": {
+        "timing_profile": 15,
+        "rpm_range_check": 2,
+        "rpm_semantic_profile": 2,
+        "replay_sequence": 3,
+        "rpm_spike_detection": 8,
+        "iforest_auxiliary": 5,
+        "id_behavior_unknown": 3,
+        "payload_profile": 481,
+        "timing_profile_bus": 1
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x421: load 4.50x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x413: load 4.54x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x46E: burst 4.98x, load 4.98x, mad_z 10.52"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x410: burst 4.97x, load 4.97x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x000: burst 15.00x, load 15.00x"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 5,
+        "tp": 0,
+        "fp": 5,
+        "tn": 99995,
+        "fn": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null,
+        "false_positive_rate": 0.0001
+      }
+    },
+    {
+      "dataset": "B-CAN",
+      "case": "ddos_tail",
+      "rows": 100000,
+      "attack_rows": 16000,
+      "attack_ratio": 0.16,
+      "unique_ids": 180,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 177,
+      "stock_alerts_total": 29084,
+      "stock_rule_alerts": 14677,
+      "stock_ml_alerts": 14407,
+      "alert_types": {
+        "temporal_anomaly": 20,
+        "rpm_out_of_range": 4,
+        "ml_auxiliary": 14407,
+        "rpm_profile_anomaly": 4,
+        "rpm_spike": 7,
+        "replay_suspected": 8,
+        "unknown_can_id": 3,
+        "payload_anomaly": 14628,
+        "bus_load_anomaly": 1,
+        "dlc_anomaly": 2
+      },
+      "alert_methods": {
+        "timing_profile": 20,
+        "rpm_range_check": 4,
+        "iforest_auxiliary": 14407,
+        "rpm_semantic_profile": 4,
+        "rpm_spike_detection": 7,
+        "replay_sequence": 8,
+        "id_behavior_unknown": 3,
+        "payload_profile": 14628,
+        "timing_profile_bus": 1,
+        "id_behavior_dlc": 2
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x413: load 4.55x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x421: load 4.51x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x4D8: burst 5.41x, load 5.41x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x4F2: load 4.04x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x000: burst 6.00x, load 6.00x"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 14407,
+        "tp": 14402,
+        "fp": 5,
+        "tn": 83995,
+        "fn": 1598,
+        "precision": 0.9997,
+        "recall": 0.9001,
+        "f1": 0.9473,
+        "false_positive_rate": 0.0001
+      }
+    },
+    {
+      "dataset": "B-CAN",
+      "case": "fuzzing_tail",
+      "rows": 100000,
+      "attack_rows": 3000,
+      "attack_ratio": 0.03,
+      "unique_ids": 2210,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 179,
+      "stock_alerts_total": 4732,
+      "stock_rule_alerts": 2208,
+      "stock_ml_alerts": 2524,
+      "alert_types": {
+        "temporal_anomaly": 16,
+        "rpm_out_of_range": 3,
+        "payload_anomaly": 25,
+        "ml_auxiliary": 2524,
+        "rpm_profile_anomaly": 3,
+        "rpm_spike": 7,
+        "replay_suspected": 14,
+        "gear_shift_anomaly": 1,
+        "unknown_can_id": 2031,
+        "bus_load_anomaly": 1,
+        "dlc_anomaly": 107
+      },
+      "alert_methods": {
+        "timing_profile": 16,
+        "rpm_range_check": 3,
+        "payload_profile": 25,
+        "iforest_auxiliary": 2524,
+        "rpm_semantic_profile": 3,
+        "rpm_spike_detection": 7,
+        "replay_sequence": 14,
+        "gear_semantic_profile": 1,
+        "id_behavior_unknown": 2031,
+        "timing_profile_bus": 1,
+        "id_behavior_dlc": 107
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x421: load 4.52x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x426: burst 5.01x, load 5.01x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x413: load 4.55x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x410: load 4.86x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x410: load 4.81x"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 2524,
+        "tp": 2524,
+        "fp": 0,
+        "tn": 97000,
+        "fn": 476,
+        "precision": 1.0,
+        "recall": 0.8413,
+        "f1": 0.9138,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "dataset": "M-CAN",
+      "case": "normal_eval",
+      "rows": 100000,
+      "attack_rows": 0,
+      "attack_ratio": 0.0,
+      "unique_ids": 54,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 54,
+      "stock_alerts_total": 5,
+      "stock_rule_alerts": 5,
+      "stock_ml_alerts": 0,
+      "alert_types": {
+        "temporal_anomaly": 1,
+        "rpm_rate_anomaly": 3,
+        "bus_load_anomaly": 1
+      },
+      "alert_methods": {
+        "timing_profile": 1,
+        "rpm_semantic_profile": 3,
+        "timing_profile_bus": 1
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x1D2: load 4.81x"
+        },
+        {
+          "type": "rpm_rate_anomaly",
+          "method": "rpm_semantic_profile",
+          "severity": "medium",
+          "description": "RPM semantic anomaly: RPM rate 5600/s exceeds learned limit"
+        },
+        {
+          "type": "rpm_rate_anomaly",
+          "method": "rpm_semantic_profile",
+          "severity": "medium",
+          "description": "RPM semantic anomaly: RPM rate 4719/s exceeds learned limit"
+        },
+        {
+          "type": "rpm_rate_anomaly",
+          "method": "rpm_semantic_profile",
+          "severity": "medium",
+          "description": "RPM semantic anomaly: RPM rate 4243/s exceeds learned limit"
+        },
+        {
+          "type": "bus_load_anomaly",
+          "method": "timing_profile_bus",
+          "severity": "high",
+          "description": "Bus-level traffic anomaly: gap_compression 2.09x"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 100000,
+        "fn": 0,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "dataset": "M-CAN",
+      "case": "ddos_tail",
+      "rows": 100000,
+      "attack_rows": 37587,
+      "attack_ratio": 0.3759,
+      "unique_ids": 55,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 54,
+      "stock_alerts_total": 66168,
+      "stock_rule_alerts": 32914,
+      "stock_ml_alerts": 33254,
+      "alert_types": {
+        "temporal_anomaly": 2,
+        "unknown_id_flood": 32906,
+        "ml_auxiliary": 33254,
+        "unknown_can_id": 1,
+        "rpm_rate_anomaly": 4,
+        "bus_load_anomaly": 1
+      },
+      "alert_methods": {
+        "timing_profile": 2,
+        "id_behavior_unknown_flood": 32906,
+        "iforest_auxiliary": 33254,
+        "id_behavior_unknown": 1,
+        "rpm_semantic_profile": 4,
+        "timing_profile_bus": 1
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x1D2: load 4.42x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x1D2: load 4.31x"
+        },
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.96, global 0.47, zero/ff constant payload"
+        },
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.96, global 0.47, zero/ff constant payload"
+        },
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.96, global 0.47, zero/ff constant payload"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 33254,
+        "tp": 33254,
+        "fp": 0,
+        "tn": 62413,
+        "fn": 4333,
+        "precision": 1.0,
+        "recall": 0.8847,
+        "f1": 0.9388,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "dataset": "M-CAN",
+      "case": "fuzzing_tail",
+      "rows": 100000,
+      "attack_rows": 11455,
+      "attack_ratio": 0.1145,
+      "unique_ids": 3866,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 54,
+      "stock_alerts_total": 13603,
+      "stock_rule_alerts": 3971,
+      "stock_ml_alerts": 9632,
+      "alert_types": {
+        "temporal_anomaly": 2,
+        "rpm_out_of_range": 2,
+        "rpm_gear_mismatch": 2,
+        "rpm_rate_anomaly": 7,
+        "ml_auxiliary": 9632,
+        "invalid_gear_state": 4,
+        "rpm_spike": 2,
+        "payload_anomaly": 23,
+        "unknown_can_id": 3812,
+        "bus_load_anomaly": 1,
+        "dlc_anomaly": 116
+      },
+      "alert_methods": {
+        "timing_profile": 2,
+        "rpm_range_check": 2,
+        "rpm_semantic_profile": 9,
+        "iforest_auxiliary": 9632,
+        "gear_state_validation": 4,
+        "rpm_spike_detection": 2,
+        "payload_profile": 23,
+        "id_behavior_unknown": 3812,
+        "timing_profile_bus": 1,
+        "id_behavior_dlc": 116
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x1D2: load 4.42x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x1D2: load 4.31x"
+        },
+        {
+          "type": "rpm_out_of_range",
+          "method": "rpm_range_check",
+          "severity": "high",
+          "description": "RPM 15881.8 exceeds max 8000.0"
+        },
+        {
+          "type": "rpm_gear_mismatch",
+          "method": "rpm_semantic_profile",
+          "severity": "high",
+          "description": "RPM semantic anomaly: outside learned RPM range [0, 1599], RPM rate 551450/s exceeds learned limit, RPM 15881.8 inconsistent with gear P profile [0, 1187]"
+        },
+        {
+          "type": "rpm_rate_anomaly",
+          "method": "rpm_semantic_profile",
+          "severity": "medium",
+          "description": "RPM semantic anomaly: RPM rate 749493/s exceeds learned limit"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 9632,
+        "tp": 9632,
+        "fp": 0,
+        "tn": 88545,
+        "fn": 1823,
+        "precision": 1.0,
+        "recall": 0.8409,
+        "f1": 0.9135,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "dataset": "Car-Hacking",
+      "case": "normal_eval",
+      "rows": 100000,
+      "attack_rows": 0,
+      "attack_ratio": 0.0,
+      "unique_ids": 27,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 27,
+      "stock_alerts_total": 174,
+      "stock_rule_alerts": 174,
+      "stock_ml_alerts": 0,
+      "alert_types": {
+        "replay_suspected": 6,
+        "payload_anomaly": 167,
+        "bus_load_anomaly": 1
+      },
+      "alert_methods": {
+        "replay_sequence": 6,
+        "payload_profile": 167,
+        "timing_profile_bus": 1
+      },
+      "sample_alerts": [
+        {
+          "type": "replay_suspected",
+          "method": "replay_sequence",
+          "severity": "medium",
+          "description": ""
+        },
+        {
+          "type": "replay_suspected",
+          "method": "replay_sequence",
+          "severity": "medium",
+          "description": ""
+        },
+        {
+          "type": "replay_suspected",
+          "method": "replay_sequence",
+          "severity": "medium",
+          "description": ""
+        },
+        {
+          "type": "replay_suspected",
+          "method": "replay_sequence",
+          "severity": "medium",
+          "description": ""
+        },
+        {
+          "type": "replay_suspected",
+          "method": "replay_sequence",
+          "severity": "medium",
+          "description": ""
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 100000,
+        "fn": 0,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "dataset": "Car-Hacking",
+      "case": "dos_tail",
+      "rows": 100000,
+      "attack_rows": 23673,
+      "attack_ratio": 0.2367,
+      "unique_ids": 27,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 26,
+      "stock_alerts_total": 52133,
+      "stock_rule_alerts": 28461,
+      "stock_ml_alerts": 23672,
+      "alert_types": {
+        "temporal_anomaly": 14,
+        "unknown_id_flood": 20107,
+        "ml_auxiliary": 23672,
+        "replay_suspected": 40,
+        "gear_shift_anomaly": 13,
+        "unknown_can_id": 1,
+        "gear_state_out_of_profile": 1,
+        "payload_anomaly": 8284,
+        "bus_load_anomaly": 1
+      },
+      "alert_methods": {
+        "timing_profile": 14,
+        "id_behavior_unknown_flood": 20107,
+        "iforest_auxiliary": 23672,
+        "replay_sequence": 40,
+        "gear_semantic_profile": 14,
+        "id_behavior_unknown": 1,
+        "payload_profile": 8284,
+        "timing_profile_bus": 1
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x5A2: repeat 1.00, payload_stall"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x5A2: repeat 1.00, payload_stall"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x5A2: repeat 1.00, payload_stall"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x5A2: repeat 1.00, payload_stall"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x5A2: repeat 1.00, payload_stall"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 23672,
+        "tp": 23672,
+        "fp": 0,
+        "tn": 76327,
+        "fn": 1,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "dataset": "Car-Hacking",
+      "case": "fuzzy_tail",
+      "rows": 100000,
+      "attack_rows": 12021,
+      "attack_ratio": 0.1202,
+      "unique_ids": 2041,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 27,
+      "stock_alerts_total": 22499,
+      "stock_rule_alerts": 11165,
+      "stock_ml_alerts": 11334,
+      "alert_types": {
+        "temporal_anomaly": 6,
+        "payload_anomaly": 9063,
+        "rpm_rate_anomaly": 2,
+        "ml_auxiliary": 11334,
+        "rpm_mode_anomaly": 3,
+        "replay_suspected": 52,
+        "gear_shift_anomaly": 8,
+        "unknown_can_id": 2014,
+        "gear_state_out_of_profile": 1,
+        "bus_load_anomaly": 1,
+        "dlc_anomaly": 15
+      },
+      "alert_methods": {
+        "timing_profile": 6,
+        "payload_profile": 9063,
+        "rpm_semantic_profile": 5,
+        "iforest_auxiliary": 11334,
+        "replay_sequence": 52,
+        "gear_semantic_profile": 9,
+        "id_behavior_unknown": 2014,
+        "timing_profile_bus": 1,
+        "id_behavior_dlc": 15
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x5A2: repeat 1.00, payload_stall"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x5A2: repeat 1.00, payload_stall"
+        },
+        {
+          "type": "payload_anomaly",
+          "method": "payload_profile",
+          "severity": "high",
+          "description": "Payload anomaly for 0x5A2: entropy_z 5.39, stable_byte_violations(6), byte_range_violations(2), unique_ratio_drift(0.42)"
+        },
+        {
+          "type": "payload_anomaly",
+          "method": "payload_profile",
+          "severity": "high",
+          "description": "Payload anomaly for 0x545: entropy_z 7.50, stable_byte_violations(6), byte_range_violations(2), unique_ratio_drift(0.58)"
+        },
+        {
+          "type": "payload_anomaly",
+          "method": "payload_profile",
+          "severity": "high",
+          "description": "Payload anomaly for 0x545: entropy_z 7.50, stable_byte_violations(6), byte_range_violations(2), unique_ratio_drift(0.58)"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 11334,
+        "tp": 11318,
+        "fp": 16,
+        "tn": 87963,
+        "fn": 703,
+        "precision": 0.9986,
+        "recall": 0.9415,
+        "f1": 0.9692,
+        "false_positive_rate": 0.0002
+      }
+    },
+    {
+      "dataset": "Car-Hacking",
+      "case": "rpm_tail",
+      "rows": 100000,
+      "attack_rows": 18952,
+      "attack_ratio": 0.1895,
+      "unique_ids": 26,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 26,
+      "stock_alerts_total": 26382,
+      "stock_rule_alerts": 4447,
+      "stock_ml_alerts": 21935,
+      "alert_types": {
+        "temporal_anomaly": 15,
+        "frequency_anomaly": 1,
+        "rpm_rate_anomaly": 2983,
+        "rpm_mode_anomaly": 18952,
+        "replay_suspected": 17,
+        "gear_shift_anomaly": 2,
+        "gear_state_out_of_profile": 1,
+        "payload_anomaly": 4410,
+        "bus_load_anomaly": 1
+      },
+      "alert_methods": {
+        "timing_profile": 15,
+        "id_behavior_burst": 1,
+        "ml_rpm_semantic_profile": 21935,
+        "replay_sequence": 17,
+        "gear_semantic_profile": 3,
+        "payload_profile": 4410,
+        "timing_profile_bus": 1
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x316: burst 7.34x, load 7.34x, mad_z 22.76"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x316: burst 8.63x, load 8.63x, mad_z 11.67"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x316: burst 6.33x, load 6.33x, mad_z 6.61"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x5A2: repeat 1.00, payload_stall"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x5A2: repeat 1.00, payload_stall"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 20726,
+        "tp": 18952,
+        "fp": 1774,
+        "tn": 79274,
+        "fn": 0,
+        "precision": 0.9144,
+        "recall": 1.0,
+        "f1": 0.9553,
+        "false_positive_rate": 0.0219
+      }
+    },
+    {
+      "dataset": "Car-Hacking",
+      "case": "gear_tail",
+      "rows": 100000,
+      "attack_rows": 18817,
+      "attack_ratio": 0.1882,
+      "unique_ids": 26,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 26,
+      "stock_alerts_total": 32061,
+      "stock_rule_alerts": 8883,
+      "stock_ml_alerts": 23178,
+      "alert_types": {
+        "temporal_anomaly": 17,
+        "frequency_anomaly": 1,
+        "replay_suspected": 11,
+        "gear_shift_anomaly": 4299,
+        "gear_state_out_of_profile": 18879,
+        "payload_anomaly": 8853,
+        "bus_load_anomaly": 1
+      },
+      "alert_methods": {
+        "timing_profile": 17,
+        "id_behavior_burst": 1,
+        "replay_sequence": 11,
+        "ml_gear_semantic_profile": 23178,
+        "payload_profile": 8853,
+        "timing_profile_bus": 1
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x43F: burst 6.71x, load 6.71x, mad_z 8.46"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x43F: burst 6.28x, load 6.28x, mad_z 11.33"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x5A2: repeat 1.00, payload_stall"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x43F: burst 9.43x, load 9.43x, mad_z 8.08"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x5A2: repeat 1.00, payload_stall"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 23178,
+        "tp": 18817,
+        "fp": 4361,
+        "tn": 76822,
+        "fn": 0,
+        "precision": 0.8118,
+        "recall": 1.0,
+        "f1": 0.8962,
+        "false_positive_rate": 0.0537
+      }
+    },
+    {
+      "dataset": "CAN-FD",
+      "case": "normal_eval",
+      "rows": 100000,
+      "attack_rows": 0,
+      "attack_ratio": 0.0,
+      "unique_ids": 54,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 54,
+      "stock_alerts_total": 36,
+      "stock_rule_alerts": 36,
+      "stock_ml_alerts": 0,
+      "alert_types": {
+        "gear_shift_anomaly": 7,
+        "payload_anomaly": 29
+      },
+      "alert_methods": {
+        "gear_semantic_profile": 7,
+        "payload_profile": 29
+      },
+      "sample_alerts": [
+        {
+          "type": "gear_shift_anomaly",
+          "method": "gear_semantic_profile",
+          "severity": "high",
+          "description": "Gear semantic anomaly: unexpected gear-state transition F0->ED"
+        },
+        {
+          "type": "gear_shift_anomaly",
+          "method": "gear_semantic_profile",
+          "severity": "high",
+          "description": "Gear semantic anomaly: unexpected gear-state transition F0->EC"
+        },
+        {
+          "type": "gear_shift_anomaly",
+          "method": "gear_semantic_profile",
+          "severity": "high",
+          "description": "Gear semantic anomaly: unexpected gear-state transition EB->E6"
+        },
+        {
+          "type": "gear_shift_anomaly",
+          "method": "gear_semantic_profile",
+          "severity": "high",
+          "description": "Gear semantic anomaly: unexpected gear-state transition ED->E6"
+        },
+        {
+          "type": "gear_shift_anomaly",
+          "method": "gear_semantic_profile",
+          "severity": "high",
+          "description": "Gear semantic anomaly: unexpected gear-state transition F0->ED"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 100000,
+        "fn": 0,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "dataset": "CAN-FD",
+      "case": "flooding",
+      "rows": 100000,
+      "attack_rows": 43070,
+      "attack_ratio": 0.4307,
+      "unique_ids": 55,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 54,
+      "stock_alerts_total": 85531,
+      "stock_rule_alerts": 42462,
+      "stock_ml_alerts": 43069,
+      "alert_types": {
+        "unknown_id_flood": 42449,
+        "ml_auxiliary": 43069,
+        "replay_suspected": 11,
+        "unknown_can_id": 1,
+        "bus_load_anomaly": 1
+      },
+      "alert_methods": {
+        "id_behavior_unknown_flood": 42449,
+        "iforest_auxiliary": 43069,
+        "replay_sequence": 11,
+        "id_behavior_unknown": 1,
+        "timing_profile_bus": 1
+      },
+      "sample_alerts": [
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.60, global 0.43, zero/ff constant payload"
+        },
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.60, global 0.43, zero/ff constant payload"
+        },
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.60, global 0.43, zero/ff constant payload"
+        },
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.57, global 0.43, zero/ff constant payload"
+        },
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.57, global 0.43, zero/ff constant payload"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 43069,
+        "tp": 43069,
+        "fp": 0,
+        "tn": 56930,
+        "fn": 1,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "dataset": "CAN-FD",
+      "case": "fuzzing",
+      "rows": 100000,
+      "attack_rows": 28156,
+      "attack_ratio": 0.2816,
+      "unique_ids": 28191,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 54,
+      "stock_alerts_total": 84662,
+      "stock_rule_alerts": 56484,
+      "stock_ml_alerts": 28178,
+      "alert_types": {
+        "temporal_anomaly": 3,
+        "payload_anomaly": 28285,
+        "ml_auxiliary": 28178,
+        "replay_suspected": 42,
+        "gear_shift_anomaly": 1,
+        "unknown_can_id": 28137,
+        "gear_state_out_of_profile": 1,
+        "bus_load_anomaly": 1,
+        "dlc_anomaly": 14
+      },
+      "alert_methods": {
+        "timing_profile": 3,
+        "payload_profile": 28285,
+        "iforest_auxiliary": 28178,
+        "replay_sequence": 42,
+        "gear_semantic_profile": 2,
+        "id_behavior_unknown": 28137,
+        "timing_profile_bus": 1,
+        "id_behavior_dlc": 14
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x413: burst 5.00x, load 5.00x, mad_z 19.62"
+        },
+        {
+          "type": "payload_anomaly",
+          "method": "payload_profile",
+          "severity": "high",
+          "description": "Payload anomaly for 0x419: entropy_z 5.41, stable_byte_violations(3), byte_range_violations(2)"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x422: load 3.69x, mad_z 4.49"
+        },
+        {
+          "type": "ml_auxiliary",
+          "method": "iforest_auxiliary",
+          "severity": "high",
+          "description": "ML auxiliary anomaly: CAN 0x4D8; unknown-id score -0.066 <= relaxed threshold 0.050"
+        },
+        {
+          "type": "ml_auxiliary",
+          "method": "iforest_auxiliary",
+          "severity": "high",
+          "description": "ML auxiliary anomaly: CAN 0x4F2; unknown-id score -0.068 <= relaxed threshold 0.050"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 28178,
+        "tp": 28134,
+        "fp": 44,
+        "tn": 71800,
+        "fn": 22,
+        "precision": 0.9984,
+        "recall": 0.9992,
+        "f1": 0.9988,
+        "false_positive_rate": 0.0006
+      }
+    },
+    {
+      "dataset": "CAN-FD",
+      "case": "malfunction",
+      "rows": 100000,
+      "attack_rows": 8212,
+      "attack_ratio": 0.0821,
+      "unique_ids": 60,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 54,
+      "stock_alerts_total": 61922,
+      "stock_rule_alerts": 51841,
+      "stock_ml_alerts": 10081,
+      "alert_types": {
+        "temporal_anomaly": 10040,
+        "frequency_anomaly": 2,
+        "payload_anomaly": 51809,
+        "ml_auxiliary": 58,
+        "gear_shift_anomaly": 1,
+        "replay_suspected": 5,
+        "unknown_can_id": 6,
+        "gear_state_out_of_profile": 1
+      },
+      "alert_methods": {
+        "ml_timing_profile": 10023,
+        "id_behavior_burst": 2,
+        "payload_profile": 51809,
+        "iforest_auxiliary": 58,
+        "timing_profile": 17,
+        "gear_semantic_profile": 2,
+        "replay_sequence": 5,
+        "id_behavior_unknown": 6
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "ml_timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x422: burst 5.00x, load 5.00x, mad_z 2697.88"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "ml_timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x422: burst 5.00x, load 5.00x, mad_z 284.03"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "ml_timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x422: burst 5.00x, load 5.00x, mad_z 284.00"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "ml_timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x422: burst 5.00x, load 5.00x, mad_z 2697.79"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "ml_timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x422: burst 5.00x, load 5.00x, mad_z 3597.40"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 10081,
+        "tp": 8191,
+        "fp": 1890,
+        "tn": 89898,
+        "fn": 21,
+        "precision": 0.8125,
+        "recall": 0.9974,
+        "f1": 0.8955,
+        "false_positive_rate": 0.0206
+      }
+    },
+    {
+      "dataset": "OTIDS-2nd",
+      "case": "normal_eval",
+      "rows": 100000,
+      "attack_rows": 0,
+      "attack_ratio": 0.0,
+      "unique_ids": 45,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 45,
+      "stock_alerts_total": 586,
+      "stock_rule_alerts": 586,
+      "stock_ml_alerts": 0,
+      "alert_types": {
+        "temporal_anomaly": 3,
+        "payload_anomaly": 561,
+        "replay_suspected": 21,
+        "bus_load_anomaly": 1
+      },
+      "alert_methods": {
+        "timing_profile": 3,
+        "payload_profile": 561,
+        "replay_sequence": 21,
+        "timing_profile_bus": 1
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x018: burst 5.00x, load 5.00x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x018: burst 5.00x, load 5.00x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x018: burst 5.70x, load 5.70x"
+        },
+        {
+          "type": "payload_anomaly",
+          "method": "payload_profile",
+          "severity": "high",
+          "description": "Payload anomaly for 0x545: entropy_z 4.14, stable_byte_violations(2), byte_range_violations(2)"
+        },
+        {
+          "type": "payload_anomaly",
+          "method": "payload_profile",
+          "severity": "high",
+          "description": "Payload anomaly for 0x545: entropy_z 4.14, stable_byte_violations(2), byte_range_violations(2)"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 100000,
+        "fn": 0,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "dataset": "OTIDS-2nd",
+      "case": "dos_segment",
+      "rows": 25870,
+      "attack_rows": 17511,
+      "attack_ratio": 0.6769,
+      "unique_ids": 46,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 45,
+      "stock_alerts_total": 15361,
+      "stock_rule_alerts": 7565,
+      "stock_ml_alerts": 7796,
+      "alert_types": {
+        "unknown_id_flood": 7562,
+        "ml_auxiliary": 7796,
+        "replay_suspected": 1,
+        "unknown_can_id": 1,
+        "bus_load_anomaly": 1
+      },
+      "alert_methods": {
+        "id_behavior_unknown_flood": 7562,
+        "iforest_auxiliary": 7796,
+        "replay_sequence": 1,
+        "id_behavior_unknown": 1,
+        "timing_profile_bus": 1
+      },
+      "sample_alerts": [
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.46, global 0.36, zero/ff constant payload"
+        },
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.46, global 0.36, zero/ff constant payload"
+        },
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.46, global 0.36, zero/ff constant payload"
+        },
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.46, global 0.36, zero/ff constant payload"
+        },
+        {
+          "type": "unknown_id_flood",
+          "method": "id_behavior_unknown_flood",
+          "severity": "critical",
+          "description": "Unknown-ID flood on 0x000: share 0.46, global 0.36, zero/ff constant payload"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 7796,
+        "tp": 7796,
+        "fp": 0,
+        "tn": 8359,
+        "fn": 9715,
+        "precision": 1.0,
+        "recall": 0.4452,
+        "f1": 0.6161,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "dataset": "OTIDS-2nd",
+      "case": "fuzzy_segment",
+      "rows": 13297,
+      "attack_rows": 4929,
+      "attack_ratio": 0.3707,
+      "unique_ids": 45,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 45,
+      "stock_alerts_total": 1821,
+      "stock_rule_alerts": 1455,
+      "stock_ml_alerts": 366,
+      "alert_types": {
+        "temporal_anomaly": 398,
+        "frequency_anomaly": 8,
+        "payload_anomaly": 1397,
+        "replay_suspected": 11,
+        "bus_load_anomaly": 1,
+        "dlc_anomaly": 6
+      },
+      "alert_methods": {
+        "timing_profile": 32,
+        "ml_timing_profile": 366,
+        "id_behavior_burst": 8,
+        "payload_profile": 1397,
+        "replay_sequence": 11,
+        "timing_profile_bus": 1,
+        "id_behavior_dlc": 6
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x110: burst 4.17x, load 4.17x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x510: burst 4.15x, load 4.15x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x050: burst 5.05x, load 5.05x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "ml_timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x043: burst 34.52x, load 34.52x"
+        },
+        {
+          "type": "temporal_anomaly",
+          "method": "ml_timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x050: burst 14.05x, load 14.05x"
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 366,
+        "tp": 349,
+        "fp": 17,
+        "tn": 8351,
+        "fn": 4580,
+        "precision": 0.9536,
+        "recall": 0.0708,
+        "f1": 0.1318,
+        "false_positive_rate": 0.002
+      }
+    },
+    {
+      "dataset": "OTIDS-2nd",
+      "case": "replay_segment",
+      "rows": 18171,
+      "attack_rows": 9791,
+      "attack_ratio": 0.5388,
+      "unique_ids": 45,
+      "unique_ids_in_builtin_whitelist": null,
+      "unique_ids_in_trained_profile": 45,
+      "stock_alerts_total": 44,
+      "stock_rule_alerts": 44,
+      "stock_ml_alerts": 0,
+      "alert_types": {
+        "temporal_anomaly": 26,
+        "replay_suspected": 8,
+        "payload_anomaly": 8,
+        "bus_load_anomaly": 1,
+        "frequency_anomaly": 1
+      },
+      "alert_methods": {
+        "timing_profile": 26,
+        "replay_sequence": 8,
+        "payload_profile": 8,
+        "timing_profile_bus": 1,
+        "id_behavior_burst": 1
+      },
+      "sample_alerts": [
+        {
+          "type": "temporal_anomaly",
+          "method": "timing_profile",
+          "severity": "high",
+          "description": "Temporal anomaly for 0x018: burst 5.00x, load 5.00x"
+        },
+        {
+          "type": "replay_suspected",
+          "method": "replay_sequence",
+          "severity": "medium",
+          "description": ""
+        },
+        {
+          "type": "replay_suspected",
+          "method": "replay_sequence",
+          "severity": "medium",
+          "description": ""
+        },
+        {
+          "type": "replay_suspected",
+          "method": "replay_sequence",
+          "severity": "medium",
+          "description": ""
+        },
+        {
+          "type": "replay_suspected",
+          "method": "replay_sequence",
+          "severity": "medium",
+          "description": ""
+        }
+      ],
+      "ml_packet_metrics": {
+        "predicted_positive": 0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 8380,
+        "fn": 9791,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "false_positive_rate": 0.0
+      }
+    }
+  ]
+}

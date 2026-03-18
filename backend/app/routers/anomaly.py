@@ -93,7 +93,7 @@ def _packet_alert_filter():
 async def get_anomaly_events(
     severity: str = Query(None),
     status: str = Query(None),
-    record_type: Literal["packet_alert", "aggregated_event"] | None = Query(None),
+    record_type: Optional[Literal["packet_alert", "aggregated_event"]] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
