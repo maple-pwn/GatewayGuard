@@ -10,7 +10,7 @@ Detects:
 
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
 import hashlib
 from app.models.packet import UnifiedPacket
 from app.models.anomaly import AnomalyEvent
@@ -194,7 +194,9 @@ class ReplaySequenceDetector:
         return float(gaps[len(gaps) // 2])
 
     @staticmethod
-    def _summarize_counter_behavior(values: List[int]) -> Dict[str, float | int | bool]:
+    def _summarize_counter_behavior(
+        values: List[int],
+    ) -> Dict[str, Union[float, int, bool]]:
         if len(values) < 10:
             return {"is_counter": False}
 

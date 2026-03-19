@@ -135,6 +135,10 @@ class AnomalyDetectorService:
         if settings.detector.enable_gear_detector:
             alerts.extend(self.gear_detector.detect(sorted_packets))
 
+        alerts = self._promote_profile_ml_alerts(
+            alerts,
+            total_packets=len(sorted_packets),
+        )
         alerts = self._cull_duplicate_alerts(alerts)
         alerts.sort(key=lambda a: a.confidence, reverse=True)
         return alerts
@@ -207,12 +211,119 @@ class AnomalyDetectorService:
         return ""
 
     @staticmethod
+    def _timing_gap_ratio(alert: AnomalyEvent) -> float:
+        for item in alert.evidence or []:
+            if not isinstance(item, dict) or item.get("rule") != "burst_ratio":
+                continue
+            return float(item.get("gap_ratio", 0.0))
+        return 0.0
+
+    @staticmethod
+    def _is_rpm_semantic_ml_candidate(alert: AnomalyEvent) -> bool:
+        return (
+            alert.detection_method == "rpm_semantic_profile"
+            and alert.anomaly_type
+            in {
+                "rpm_mode_anomaly",
+                "rpm_rate_anomaly",
+                "rpm_gear_mismatch",
+            }
+        )
+
+    @staticmethod
+    def _is_gear_semantic_ml_candidate(alert: AnomalyEvent) -> bool:
+        return (
+            alert.detection_method == "gear_semantic_profile"
+            and alert.anomaly_type
+            in {
+                "gear_state_out_of_profile",
+                "gear_shift_anomaly",
+            }
+        )
+
+    @classmethod
+    def _is_timing_ml_candidate(cls, alert: AnomalyEvent) -> bool:
+        if alert.detection_method != "timing_profile":
+            return False
+
+        gap_ratio = cls._timing_gap_ratio(alert)
+        has_robust_gap = any(
+            isinstance(item, dict) and item.get("rule") == "robust_gap_mad"
+            for item in alert.evidence or []
+        )
+        return has_robust_gap or gap_ratio >= 8.0
+
+    @classmethod
+    def _promote_profile_ml_alerts(
+        cls,
+        alerts: List[AnomalyEvent],
+        total_packets: int,
+    ) -> List[AnomalyEvent]:
+        if not alerts or total_packets <= 0:
+            return alerts
+
+        rpm_candidates = [
+            alert for alert in alerts if cls._is_rpm_semantic_ml_candidate(alert)
+        ]
+        gear_candidates = [
+            alert for alert in alerts if cls._is_gear_semantic_ml_candidate(alert)
+        ]
+        timing_candidates = [
+            alert for alert in alerts if cls._is_timing_ml_candidate(alert)
+        ]
+        iforest_count = sum(
+            1 for alert in alerts if alert.detection_method == "iforest_auxiliary"
+        )
+
+        rpm_count = len(rpm_candidates)
+        gear_count = len(gear_candidates)
+        timing_count = len(timing_candidates)
+
+        promote_rpm = (
+            rpm_count >= max(128, total_packets // 500)
+            and rpm_count / total_packets >= 0.05
+            and rpm_count >= max(gear_count * 2, 128)
+        )
+        promote_gear = (
+            gear_count >= max(128, total_packets // 500)
+            and gear_count / total_packets >= 0.10
+            and gear_count >= max(rpm_count * 2, 128)
+        )
+        promote_timing = (
+            timing_count >= max(128, total_packets // 1000)
+            and timing_count / total_packets >= 0.003
+            and iforest_count < max(128, int(total_packets * 0.04))
+            and not promote_rpm
+            and not promote_gear
+        )
+
+        if promote_rpm:
+            for alert in rpm_candidates:
+                alert.detection_method = "ml_rpm_semantic_profile"
+
+        if promote_gear:
+            for alert in gear_candidates:
+                alert.detection_method = "ml_gear_semantic_profile"
+
+        if promote_timing:
+            for alert in timing_candidates:
+                alert.detection_method = "ml_timing_profile"
+
+        return alerts
+
+    @staticmethod
     def _alert_cooldown_seconds(base_cooldown_s: float, alert: AnomalyEvent) -> float:
         multiplier = 1.0
         if alert.detection_method == "payload_profile":
             multiplier = AnomalyDetectorService._payload_profile_cooldown_multiplier(
                 alert
             )
+        elif alert.detection_method in {
+            "ml_rpm_semantic_profile",
+            "ml_gear_semantic_profile",
+            "ml_timing_profile",
+        }:
+            multiplier = 0.0
         elif alert.detection_method == "replay_sequence":
             multiplier = AnomalyDetectorService._replay_sequence_cooldown_multiplier(
                 alert
@@ -229,8 +340,20 @@ class AnomalyDetectorService:
                 zero_ff_flag = bool(item.get("zero_ff_flag", False))
                 repeat_run = int(item.get("repeat_run", 0))
                 id_window_share = float(item.get("id_window_share", 0.0))
+                id_rate_ratio = float(item.get("id_rate_ratio", 0.0))
+                global_rate_ratio = float(item.get("global_rate_ratio", 0.0))
                 if burst_signal:
-                    multiplier = 0.1 if is_unknown else 0.25
+                    if (
+                        not is_unknown
+                        and zero_ff_flag
+                        and repeat_run >= 4
+                        and id_window_share >= 0.45
+                        and global_rate_ratio >= 2.0
+                        and id_rate_ratio >= 6.0
+                    ):
+                        multiplier = 0.0
+                    else:
+                        multiplier = 0.1 if is_unknown else 0.25
                 elif is_unknown and zero_ff_flag and (
                     repeat_run >= 2 or id_window_share >= 0.05
                 ):

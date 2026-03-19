@@ -22,6 +22,12 @@ nohup.out
 
 # Generated reports and local artifacts
 reports/
+!reports/
+reports/*
+!reports/dataset_survey_and_evaluation.md
+!reports/external_can_eval_iter2_diff.md
+!reports/external_can_eval_current_run.json
+!reports/external_can_eval_iter2.json
 compare_prev_logic.json
 
 # OS
