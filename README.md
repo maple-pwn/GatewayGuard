@@ -81,22 +81,20 @@ X = {p_t}_{t=1}^T,  p_t = (tau_t, proto_t, src_t, dst_t, id_t, x_t, dom_t)
 E_t = <e_id, e_time, e_payload, e_seq, e_sem, e_aux>
 ```
 
-$$
-X=\{p_t\}_{t=1}^{T}, \qquad
-p_t=(\tau_t,\pi_t,s_t,d_t,i_t,\mathbf{x}_t,\delta_t)
-$$
+为适配 GitHub README 渲染，本文中的形式化表达统一使用 ASCII 代码块记法：
 
-$$
-\mathbf{E}_t=
-\big[e_{\mathrm{id}}(t),\,e_{\mathrm{time}}(t),\,e_{\mathrm{payload}}(t),\,e_{\mathrm{seq}}(t),\,e_{\mathrm{sem}}(t),\,e_{\mathrm{aux}}(t)\big]
-$$
+```text
+X = {p_t | t = 1..T}
+p_t = (tau_t, pi_t, s_t, d_t, i_t, x_t, delta_t)
+E_t = [e_id(t), e_time(t), e_payload(t), e_seq(t), e_sem(t), e_aux(t)]
+```
 
 并通过层级式证据融合算子 `Phi(.)` 生成包级告警集合 `A_pkt`，再经时间窗聚合算子 `G_Delta(.)` 生成事件级告警集合 `A_evt`。该过程对应“**画像学习 -> 多视角判别 -> 证据去重 -> 事件聚合 -> 语义解释**”的分层安全分析链。
 
-$$
-\mathcal{A}_{\mathrm{pkt}}=\Phi(\mathbf{E}_t,P_{i_t},C_t), \qquad
-\mathcal{A}_{\mathrm{evt}}=G_{\Delta}\!\left(\mathcal{A}_{\mathrm{pkt}}\right)
-$$
+```text
+A_pkt = Phi(E_t, P_{i_t}, C_t)
+A_evt = G_Delta(A_pkt)
+```
 
 | 局限 | 本方案的应对方式 |
 |------|------------------|
@@ -146,20 +144,16 @@ P_i = {
 }
 ```
 
-$$
-P_i=
-\left\{
-\mathcal{D}_i,\lambda_i,\tilde g_i,\sigma_{g,i},q_{0.1,i},q_{0.9,i},
-\mu_{H,i},\sigma_{H,i},\rho^{\mathrm{rep}}_i,\mu^{\mathrm{chg}}_i,\mu^{\mathrm{val}}_i
-\right\}
-$$
+```text
+P_i = {
+  D_i, lambda_i, g_tilde_i, sigma_g_i, q0.1_i, q0.9_i,
+  mu_H_i, sigma_H_i, rho_rep_i, mu_chg_i, mu_val_i
+}
 
-$$
-\tilde g_i=\operatorname{median}\left(\Delta\tau^{(i)}\right), \qquad
-\lambda_i=\frac{N_i}{T_i}, \qquad
-\rho^{\mathrm{rep}}_i=
-\frac{1}{N_i-1}\sum_{k=2}^{N_i}\mathbf{1}\!\left(\mathbf{x}^{(i)}_k=\mathbf{x}^{(i)}_{k-1}\right)
-$$
+g_tilde_i = median(Delta tau^(i))
+lambda_i = N_i / T_i
+rho_rep_i = (1 / (N_i - 1)) * sum_{k=2..N_i} 1[x_k^(i) = x_(k-1)^(i)]
+```
 
 在检测阶段，系统围绕单条报文及其上下文构造多视角异常证据：
 
@@ -185,16 +179,6 @@ S_t = <s_id(t), s_time(t), s_payload(t), s_seq(t), s_sem(t), s_aux(t)>
 A_pkt = Phi(S_t, P_i, C_t)
 A_evt = G_Delta(A_pkt)
 ```
-
-$$
-\mathbf{S}_t=
-\big[s_{\mathrm{id}}(t),\,s_{\mathrm{time}}(t),\,s_{\mathrm{payload}}(t),\,s_{\mathrm{seq}}(t),\,s_{\mathrm{sem}}(t),\,s_{\mathrm{aux}}(t)\big]
-$$
-
-$$
-\mathcal{A}_{\mathrm{pkt}}=\Phi(\mathbf{S}_t,P_i,C_t), \qquad
-\mathcal{A}_{\mathrm{evt}}=G_{\Delta}\!\left(\mathcal{A}_{\mathrm{pkt}}\right)
-$$
 
 其中 `C_t` 表示滑动上下文窗口，`Phi(.)` 并不是单一分类器，而是由多个检测器分别输出证据项、置信度和检测方法后形成的层级式融合机制；`G_Delta(.)` 则对应基于时间窗和目标节点的一致性事件聚合机制。
 
@@ -628,21 +612,12 @@ r_load(t)  = lambda_i(t) / lambda_i^base
 z_mad(t)   = |median(Delta tau in W_i(t)) - g50_i| / (1.4826 * MAD(W_i(t)))
 ```
 
-$$
-\tilde g_i^{\,\mathrm{obs}}(t)=
-\operatorname{median}\!\Big(\{\Delta\tau_k^{(i)}:k\in W_i(t)\}\Big)
-$$
-
-$$
-r_{\mathrm{gap}}(t)=\frac{\tilde g_i}{\tilde g_i^{\,\mathrm{obs}}(t)+\varepsilon}, \qquad
-r_{\mathrm{load}}(t)=\frac{\lambda_i^{\,\mathrm{obs}}(t)}{\lambda_i^{\,\mathrm{base}}+\varepsilon}
-$$
-
-$$
-z_{\mathrm{MAD}}(t)=
-\frac{\left|\tilde g_i^{\,\mathrm{obs}}(t)-\tilde g_i\right|}
-{1.4826\cdot \operatorname{MAD}\!\big(W_i(t)\big)+\varepsilon}
-$$
+```text
+g_obs_i(t) = median({Delta tau_k^(i) : k in W_i(t)})
+r_gap(t)   = g_tilde_i / (g_obs_i(t) + eps)
+r_load(t)  = lambda_obs_i(t) / (lambda_base_i + eps)
+z_MAD(t)   = abs(g_obs_i(t) - g_tilde_i) / (1.4826 * MAD(W_i(t)) + eps)
+```
 
 其中 `r_gap(t)` 描述节拍压缩强度，`r_load(t)` 描述局部负载膨胀倍数，`z_mad(t)` 描述相对于鲁棒尺度估计的时序偏离强度。由于当前实现采用中位数、MAD 与分位数而非均值阈值，故对瞬时抖动、个别乱序与非高斯波动具有更强鲁棒性。DoS/Flooding 检测并不是独立的总线负载模块，而是通过 `gap ratio + load factor + robust gap deviation` 的联合证据在 `TimingProfileDetector` 内部完成基线感知判别。
 
@@ -657,22 +632,13 @@ z_H(t) = |H(x_t)-mu_H,i| / sigma_H,i
 d_uniq(t) = |rho_uniq(x_t)-rho_uniq,i|
 ```
 
-$$
-H(\mathbf{x}_t)=
--\sum_{b\in\mathcal{B}(\mathbf{x}_t)}p(b)\log_2 p(b)
-$$
-
-$$
-\rho_{\mathrm{uniq}}(\mathbf{x}_t)=
-\frac{\left|\operatorname{uniq}(\mathbf{x}_t)\right|}{\left|\mathbf{x}_t\right|}, \qquad
-\delta_{\mathrm{chg}}(t)=
-\frac{1}{m}\sum_{j=1}^{m}\mathbf{1}\!\left(x_t^{(j)}\neq x_{t-1}^{(j)}\right)
-$$
-
-$$
-z_H(t)=\frac{|H(\mathbf{x}_t)-\mu_{H,i}|}{\sigma_{H,i}+\varepsilon}, \qquad
-d_{\mathrm{uniq}}(t)=\left|\rho_{\mathrm{uniq}}(\mathbf{x}_t)-\rho_{\mathrm{uniq},i}\right|
-$$
+```text
+H(x_t) = - sum_{b in B(x_t)} p(b) * log2 p(b)
+rho_uniq(x_t) = |uniq(x_t)| / |x_t|
+delta_chg(t) = (1 / m) * sum_{j=1..m} 1[x_t^(j) != x_(t-1)^(j)]
+z_H(t) = abs(H(x_t) - mu_H_i) / (sigma_H_i + eps)
+d_uniq(t) = abs(rho_uniq(x_t) - rho_uniq_i)
+```
 
 其中 `H(x_t)` 为字节熵，`rho_uniq(x_t)` 为载荷唯一字节占比。该设计本质上是在离散字节空间上构造一种轻量级“局部统计流形约束”：稳定字节用于描述强约束维度，`3-sigma` 区间用于描述弱约束维度，熵漂移和唯一比漂移则用于描述整体分布结构偏离。对于合法 ID 下的 Spoofing、Fuzzy 和常量载荷注入，该机制较单一阈值或单一熵特征具有更强覆盖能力。
 
@@ -684,16 +650,12 @@ $$
 h_t^w = MD5(x_{t-w+1} || ... || x_t)
 ```
 
-$$
-Q_t^{(w)}=
-\left[\mathbf{x}_{t-w+1},\mathbf{x}_{t-w+2},\ldots,\mathbf{x}_t\right], \qquad
-h_t^{(w)}=\operatorname{MD5}\!\left(\mathbf{x}_{t-w+1}\Vert\cdots\Vert\mathbf{x}_t\right)
-$$
-
-$$
-\Delta c_t=(c_t-c_{t-1})\bmod M, \qquad
-\text{rollback if } \Delta c_t \notin \mathcal{S}_i^{\mathrm{counter}}
-$$
+```text
+Q_t^(w) = [x_{t-w+1}, x_{t-w+2}, ..., x_t]
+h_t^(w) = MD5(x_{t-w+1} || ... || x_t)
+Delta c_t = (c_t - c_(t-1)) mod M
+rollback if Delta c_t not in S_counter_i
+```
 
 训练阶段，系统学习每个 ID 的：
 
@@ -720,21 +682,6 @@ rpm(t) > rpm_max
 (gear_{t-1}, gear_t) notin T_allowed
 rpm(t) notin [l_gear, u_gear]
 ```
-
-$$
-\mathrm{rpm}(t) > \mathrm{rpm}_{\max}
-$$
-
-$$
-\frac{\left|\mathrm{rpm}(t)-\mathrm{rpm}(t-1)\right|}{\Delta\tau_t}
->
-\theta^{\mathrm{rate}}_{\mathrm{rpm}}
-$$
-
-$$
-\big(g_{t-1},g_t\big)\notin \mathcal{T}_{\mathrm{allow}}, \qquad
-\mathrm{rpm}(t)\notin\left[l_{g_t},u_{g_t}\right]
-$$
 
 其中 `T_allowed` 为训练阶段学得的档位转移图，`[l_gear, u_gear]` 为给定档位下 RPM 的条件区间。该机制并不依赖完整 DBC 语义知识，而是通过轻量上下文关联实现对“合法帧内语义篡改”的约束，从而弥补纯报文字节统计无法覆盖的动力域攻击。
 
@@ -764,27 +711,6 @@ $$
 ]
 ```
 
-$$
-\mathbf{f}_t=
-\Big[
-\log(1+\mathrm{id}_t),\;
-\ell_t,\;
-H(\mathbf{x}_t),\;
-\pi_t,\;
-\delta_t,\;
-\log(1+\Delta\tau_t^{\mu s}),\;
-\delta_{\mathrm{chg}}(t),\;
-\delta_{\mathrm{val}}(t),\;
-r_{\mathrm{gap}}(t),\;
-r_{\mathrm{id}}(t),\;
-r_{\mathrm{global}}(t),\;
-\eta_i(t),\;
-\rho_{\mathrm{run}}(t),\;
-z_{0/FF}(t),\;
-\kappa_i
-\Big]
-$$
-
 - 阈值采用训练分数分位自校准策略：以训练集 `decision_function` 的低分位统计量确定主阈值，并对 unknown-id 样本保留相对宽松的触发边界。
 - 对已知 ID，IForest 分支不会单独作为主判据，而是要求与 burst/flood 类显式信号形成共证后才输出辅助告警。
 
@@ -796,16 +722,10 @@ $$
 A_evt = G_Delta(A_pkt; anomaly_type, target_node, [t, t+Delta])
 ```
 
-$$
-\mathcal{E}_k=
-G_{\Delta}\!\left(\mathcal{A}_{\mathrm{pkt}};\,
-\text{type},\text{node},[\tau,\tau+\Delta]\right)
-$$
-
-$$
-\operatorname{Conf}(\mathcal{E}_k)=
-\frac{\sum_{j\in \mathcal{E}_k} c_j\,n_j}{\sum_{j\in \mathcal{E}_k} n_j}
-$$
+```text
+E_k = G_Delta(A_pkt; type, node, [tau, tau + Delta])
+Conf(E_k) = (sum_j c_j * n_j) / (sum_j n_j)
+```
 
 该设计使最终结果同时具有**包级敏感性**与**事件级稳定性**：前者用于定位细粒度异常瞬时点，后者用于支持运营视角的时间线分析、聚合统计与 LLM 报告生成。
 
@@ -877,17 +797,12 @@ $$
 
 若记第 `k` 个攻击 case 的攻击样本数为 `a_k`、对应 `F1` 为 `F1_k`，则发布版总体攻击检测指标记为：
 
-$$
-\mathrm{WeightedF1}_{\mathrm{release}}=
-\frac{\sum_{k=1}^{K} a_k \cdot F1_k}{\sum_{k=1}^{K} a_k},
-\qquad K=11
-$$
+```text
+WeightedF1_release = (sum_{k=1..K} a_k * F1_k) / (sum_{k=1..K} a_k)
+K = 11
+```
 
-在当前发布版口径下：
-
-$$
-\mathrm{WeightedF1}_{\mathrm{release}} = 0.9617
-$$
+在当前发布版口径下，`WeightedF1_release = 0.9617`。
 
 相较上一轮发布口径使用的 `reports/external_can_eval_current_run.json`，攻击 case 加权 `weighted_f1` 由 `0.8860` 提升至 `0.9617`。
 
