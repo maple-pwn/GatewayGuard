@@ -71,15 +71,13 @@
 
 形式化地，设网关侧观测到的异构报文流为
 
-```text
+$$
 X = {p_t}_{t=1}^T,  p_t = (tau_t, proto_t, src_t, dst_t, id_t, x_t, dom_t)
-```
-
+$$
 其中 `tau_t` 为时间戳，`proto_t` 为协议类型，`id_t` 为报文标识，`x_t` 为原始载荷，`dom_t` 为功能域。系统首先在正常样本子集 `X_train` 上学习每个 `id_t` 对应的正常性画像 `P_i`，随后在在线阶段对待测流 `X_det` 计算多视角异常证据向量
-
-```text
+$$
 E_t = <e_id, e_time, e_payload, e_seq, e_sem, e_aux>
-```
+$$
 
 $$
 X=\{p_t\}_{t=1}^{T}, \qquad
@@ -149,24 +147,24 @@ P_i = {
 $$
 P_i=
 \left\{
-\mathcal{D}_i,\lambda_i,\tilde g_i,\sigma_{g,i},q_{0.1,i},q_{0.9,i},
+\begin{aligned}
+\mathcal{D}_i,\lambda_i,\tilde g_i,\sigma_{g,i},q_{0.1,i},q_{0.9,i},\\
 \mu_{H,i},\sigma_{H,i},\rho^{\mathrm{rep}}_i,\mu^{\mathrm{chg}}_i,\mu^{\mathrm{val}}_i
+\end{aligned}
 \right\}
 $$
 
 $$
-\tilde g_i=\operatorname{median}\left(\Delta\tau^{(i)}\right), \qquad
-\lambda_i=\frac{N_i}{T_i}, \qquad
+\tilde g_i=\mathrm{median}(\Delta\tau^{(i)}),\quad
+\lambda_i=\frac{N_i}{T_i},\quad
 \rho^{\mathrm{rep}}_i=
-\frac{1}{N_i-1}\sum_{k=2}^{N_i}\mathbf{1}\!\left(\mathbf{x}^{(i)}_k=\mathbf{x}^{(i)}_{k-1}\right)
+\frac{1}{N_i-1}\sum_{k=2}^{N_i}\mathbf{1}(\mathbf{x}^{(i)}_k=\mathbf{x}^{(i)}_{k-1})
 $$
 
 在检测阶段，系统围绕单条报文及其上下文构造多视角异常证据：
-
-```text
-p -> {s_id, s_time, s_payload, s_seq, s_signal, s_aux}
-```
-
+$$
+p \rightarrow \{s_id, s_time, s_payload, s_seq, s_signal, s_aux\}
+$$
 其中：
 
 - `s_id`：ID 白名单、DLC 合规性、突发频率、未知 ID flooding 等行为偏差。
@@ -180,11 +178,13 @@ p -> {s_id, s_time, s_payload, s_seq, s_signal, s_aux}
 
 进一步地，系统的在线判别过程可写为：
 
-```text
-S_t = <s_id(t), s_time(t), s_payload(t), s_seq(t), s_sem(t), s_aux(t)>
-A_pkt = Phi(S_t, P_i, C_t)
-A_evt = G_Delta(A_pkt)
-```
+$$
+\begin{align}
+S_t &= <s_id(t), s_time(t), s_payload(t), s_seq(t), s_sem(t), s_aux(t)>\\
+A_pkt &= Phi(S_t, P_i, C_t)\\
+A_evt &= G_Delta(A_pkt)\\
+\end{align}
+$$
 
 $$
 \mathbf{S}_t=
@@ -629,19 +629,18 @@ z_mad(t)   = |median(Delta tau in W_i(t)) - g50_i| / (1.4826 * MAD(W_i(t)))
 ```
 
 $$
-\tilde g_i^{\,\mathrm{obs}}(t)=
-\operatorname{median}\!\Big(\{\Delta\tau_k^{(i)}:k\in W_i(t)\}\Big)
+\tilde g_i^{\,\mathrm{obs}}(t)=\mathrm{median}(\{\Delta\tau_k^{(i)}:k\in W_i(t)\})
 $$
 
 $$
-r_{\mathrm{gap}}(t)=\frac{\tilde g_i}{\tilde g_i^{\,\mathrm{obs}}(t)+\varepsilon}, \qquad
-r_{\mathrm{load}}(t)=\frac{\lambda_i^{\,\mathrm{obs}}(t)}{\lambda_i^{\,\mathrm{base}}+\varepsilon}
+r_{\mathrm{gap}}(t)=\frac{\tilde g_i}{\tilde g_i^{\mathrm{obs}}(t)+\varepsilon},\quad
+r_{\mathrm{load}}(t)=\frac{\lambda_i^{\mathrm{obs}}(t)}{\lambda_i^{\mathrm{base}}+\varepsilon}
 $$
 
 $$
 z_{\mathrm{MAD}}(t)=
-\frac{\left|\tilde g_i^{\,\mathrm{obs}}(t)-\tilde g_i\right|}
-{1.4826\cdot \operatorname{MAD}\!\big(W_i(t)\big)+\varepsilon}
+\frac{|\tilde g_i^{\mathrm{obs}}(t)-\tilde g_i|}
+{1.4826\cdot \mathrm{MAD}(W_i(t))+\varepsilon}
 $$
 
 其中 `r_gap(t)` 描述节拍压缩强度，`r_load(t)` 描述局部负载膨胀倍数，`z_mad(t)` 描述相对于鲁棒尺度估计的时序偏离强度。由于当前实现采用中位数、MAD 与分位数而非均值阈值，故对瞬时抖动、个别乱序与非高斯波动具有更强鲁棒性。DoS/Flooding 检测并不是独立的总线负载模块，而是通过 `gap ratio + load factor + robust gap deviation` 的联合证据在 `TimingProfileDetector` 内部完成基线感知判别。
@@ -664,9 +663,9 @@ $$
 
 $$
 \rho_{\mathrm{uniq}}(\mathbf{x}_t)=
-\frac{\left|\operatorname{uniq}(\mathbf{x}_t)\right|}{\left|\mathbf{x}_t\right|}, \qquad
+\frac{|\mathrm{uniq}(\mathbf{x}_t)|}{|\mathbf{x}_t|}, \quad
 \delta_{\mathrm{chg}}(t)=
-\frac{1}{m}\sum_{j=1}^{m}\mathbf{1}\!\left(x_t^{(j)}\neq x_{t-1}^{(j)}\right)
+\frac{1}{m}\sum_{j=1}^{m}\mathbf{1}(x_t^{(j)}\neq x_{t-1}^{(j)})
 $$
 
 $$
@@ -686,8 +685,8 @@ h_t^w = MD5(x_{t-w+1} || ... || x_t)
 
 $$
 Q_t^{(w)}=
-\left[\mathbf{x}_{t-w+1},\mathbf{x}_{t-w+2},\ldots,\mathbf{x}_t\right], \qquad
-h_t^{(w)}=\operatorname{MD5}\!\left(\mathbf{x}_{t-w+1}\Vert\cdots\Vert\mathbf{x}_t\right)
+[\mathbf{x}_{t-w+1},\mathbf{x}_{t-w+2},\ldots,\mathbf{x}_t], \quad
+h_t^{(w)}=\mathrm{MD5}(\mathbf{x}_{t-w+1}\Vert\cdots\Vert\mathbf{x}_t)
 $$
 
 $$
@@ -726,8 +725,7 @@ $$
 $$
 
 $$
-\frac{\left|\mathrm{rpm}(t)-\mathrm{rpm}(t-1)\right|}{\Delta\tau_t}
->
+\frac{\left|\mathrm{rpm}(t)-\mathrm{rpm}(t-1)\right|}{\Delta\tau_t}>
 \theta^{\mathrm{rate}}_{\mathrm{rpm}}
 $$
 
@@ -803,8 +801,8 @@ G_{\Delta}\!\left(\mathcal{A}_{\mathrm{pkt}};\,
 $$
 
 $$
-\operatorname{Conf}(\mathcal{E}_k)=
-\frac{\sum_{j\in \mathcal{E}_k} c_j\,n_j}{\sum_{j\in \mathcal{E}_k} n_j}
+\mathrm{Conf}(\mathcal{E}_k)=
+\frac{\sum_{j\in \mathcal{E}_k} c_j n_j}{\sum_{j\in \mathcal{E}_k} n_j}
 $$
 
 该设计使最终结果同时具有**包级敏感性**与**事件级稳定性**：前者用于定位细粒度异常瞬时点，后者用于支持运营视角的时间线分析、聚合统计与 LLM 报告生成。
