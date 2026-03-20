@@ -1,45 +1,45 @@
-# API Clients
+# API 客户端
 
-## index.js — REST API Client
+## index.js — REST API 客户端
 
-Axios-based client for CRUD operations. Centralized config with auto-auth headers.
+基于 Axios 的 CRUD 客户端。集中式配置，并自动附带认证请求头。
 
-### Endpoints
-- `/api/traffic` — Traffic management (GET, POST, DELETE)
-- `/api/anomaly` — Anomaly fetching, filtering (GET)
-- `/api/llm` — LLM queries, function calling (POST)
-- `/api/system` — Health, config, logs (GET/POST)
+### 端点
+- `/api/traffic` — 流量管理（GET、POST、DELETE）
+- `/api/anomaly` — 异常获取与过滤（GET）
+- `/api/llm` — LLM 查询、函数调用（POST）
+- `/api/system` — 健康状态、配置、日志（GET/POST）
 
-### Key Methods
+### 关键方法
 ```javascript
-- getTraffic(filter)      // Traffic stream queries
-- getAnomalies(severity)  // Severity filter: critical/high/medium/low
-- callLLM(prompt)         // Send prompt → function calling
-- getSystemInfo()         // Health + uptime stats
+- getTraffic(filter)      // 流量流查询
+- getAnomalies(severity)  // 严重等级过滤：critical/high/medium/low
+- callLLM(prompt)         // 发送提示词 → 函数调用
+- getSystemInfo()         // 健康状态 + 运行时长统计
 ```
 
 ---
 
-## ws.js — WebSocket Client
+## ws.js — WebSocket 客户端
 
-Real-time traffic streaming with resilience.
+具备韧性的实时流量流式处理客户端。
 
-### Resilience Patterns
-- **Auto-reconnect**: Exponential backoff (1s→30s cap)
-- **Heartbeat**: 30s ping/pong, dead peer cleanup after 3× missed
-- **Stream recovery**: Last timestamp sync on reconnect
+### 韧性模式
+- **自动重连**: 指数退避（1 秒起步，最大 30 秒）
+- **心跳**: 30 秒 ping/pong，连续丢失 3 次后清理失活连接
+- **流恢复**: 重连时按最后时间戳同步
 
-### Key Methods
+### 关键方法
 ```javascript
-- connect()        // Initiate connection
-- disconnect()     // Graceful close
-- subscribe(cb)    // Traffic packet callbacks
-- sendHeartbeat()  // Manual heartbeat
+- connect()        // 初始化连接
+- disconnect()     // 优雅关闭
+- subscribe(cb)    // 流量数据包回调订阅
+- sendHeartbeat()  // 手动发送心跳
 ```
 
-### Events
-- `open` — Connection established
-- `message` — Traffic packet received
-- `close` — Graceful disconnect
-- `reconnecting` — Backoff in progress
-- `error` — Fatal error (no auto-reconnect)
+### 事件
+- `open` — 连接建立
+- `message` — 收到流量数据包
+- `close` — 优雅断开
+- `reconnecting` — 正在退避重连
+- `error` — 致命错误（不会自动重连）
