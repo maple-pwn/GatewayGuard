@@ -89,6 +89,20 @@ def _packet_alert_filter():
     )
 
 
+def _training_status() -> dict:
+    return {
+        "trained": detector.is_trained,
+        "vehicle_profile": settings.detector.vehicle_profile,
+        "min_train_packets": settings.detector.min_train_packets,
+    }
+
+
+@router.get("/status")
+async def get_detector_status():
+    """查询检测器训练状态"""
+    return _training_status()
+
+
 @router.get("/events")
 async def get_anomaly_events(
     severity: str = Query(None),
@@ -192,6 +206,7 @@ async def trigger_training(
     packets = await _load_latest_packets_chronological(db, limit)
     if not packets:
         return {
+            **_training_status(),
             "trained": False,
             "packet_count": 0,
             "message": "No traffic data available for training",
@@ -200,12 +215,14 @@ async def trigger_training(
     detector.train(packets)
     if not detector.is_trained:
         return {
+            **_training_status(),
             "trained": False,
             "packet_count": len(packets),
             "message": "Insufficient packets for training",
         }
 
     return {
+        **_training_status(),
         "trained": True,
         "packet_count": len(packets),
         "vehicle_profile": settings.detector.vehicle_profile,

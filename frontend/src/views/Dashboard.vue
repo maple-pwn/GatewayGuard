@@ -132,13 +132,34 @@
           </el-select>
         </div>
 
+        <div class="scenario-status">
+          <el-tag :type="trainingStateTag" effect="dark">
+            {{ trainingStatus.trained ? '检测器已训练' : '检测器未训练' }}
+          </el-tag>
+          <span class="scenario-status__text">
+            建议先生成正常流量并训练，再执行攻击检测。
+          </span>
+        </div>
+
         <div class="scenario-actions">
           <el-button type="primary" @click="simulateTraffic" :loading="simLoading">
             生成模拟流量
           </el-button>
+          <el-button type="warning" @click="trainDetector()" :loading="trainingLoading">
+            训练检测器
+          </el-button>
           <el-button type="danger" @click="runDetection" :loading="detectLoading">
             执行异常检测
           </el-button>
+        </div>
+
+        <div v-if="trainingResult" class="scenario-result">
+          <el-alert
+            :title="trainingResult.message"
+            :type="trainingResult.trained ? 'success' : 'warning'"
+            show-icon
+            :closable="false"
+          />
         </div>
 
         <div v-if="detectResult" class="scenario-result">
@@ -198,13 +219,22 @@
       <div class="section-head">
         <div>
           <div class="section-head__title">最近流量记录</div>
-          <div class="section-head__desc">保留原有表格能力，但换成更整洁的门户化表格容器。</div>
+          <div class="section-head__desc">
+            最近 50 条记录中有 {{ visibleAttackCount }} 条为模拟攻击流量，便于演示时快速确认注入结果。
+          </div>
         </div>
       </div>
 
       <el-card class="panel-card table-card">
         <el-table :data="packets" stripe style="width: 100%" max-height="460">
           <el-table-column prop="protocol" label="协议" width="90" />
+          <el-table-column label="类型" width="140">
+            <template #default="{ row }">
+              <el-tag :type="row.is_attack ? 'danger' : 'success'" effect="dark">
+                {{ attackLabel(row) }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="source" label="源节点" width="140" />
           <el-table-column prop="destination" label="目标节点" width="140" />
           <el-table-column prop="msg_id" label="消息 ID" width="140" />
@@ -218,6 +248,7 @@
             <template #default="{ row }">
               <span class="packet-summary">
                 {{ row.protocol }} / {{ row.domain || 'unknown' }} / {{ row.source || '-' }}
+                <template v-if="row.attack_type"> / {{ row.attack_type }}</template>
               </span>
             </template>
           </el-table-column>
@@ -296,8 +327,10 @@ const stats = ref({ total_packets: 0, can_count: 0, eth_count: 0, v2x_count: 0 }
 const packets = ref([])
 const scenario = ref('mixed')
 const simLoading = ref(false)
+const trainingLoading = ref(false)
 const detectLoading = ref(false)
 const clearLoading = ref(false)
+const trainingResult = ref(null)
 const detectResult = ref(null)
 const showPartialClean = ref(false)
 const cleanTarget = ref('packets')
@@ -325,20 +358,73 @@ const wsStateLabel = computed(() => ({
   connected: 'WS 已连接', connecting: 'WS 连接中', disconnected: 'WS 断开',
 }[wsState.value] || 'WS 未知'))
 
+const visibleAttackCount = computed(() =>
+  packets.value.filter(packet => packet.is_attack).length,
+)
+
+const trainingStatus = ref({
+  trained: false,
+  vehicle_profile: 'default',
+  min_train_packets: 10,
+})
+
+const trainingStateTag = computed(() => (
+  trainingStatus.value.trained ? 'success' : 'warning'
+))
+
 function severityColor(s) {
   return { critical: 'danger', high: 'warning', medium: '', low: 'info' }[s] || 'info'
 }
 
+function attackLabel(row) {
+  if (!row?.is_attack) {
+    return '正常'
+  }
+  return row.attack_type ? `恶意 / ${row.attack_type}` : '恶意'
+}
+
 async function loadData() {
   try {
-    const [s, p] = await Promise.all([
+    const [s, p, t] = await Promise.all([
       trafficApi.getStats(),
       trafficApi.getPackets({ limit: 50 }),
+      anomalyApi.status(),
     ])
     stats.value = s.data
     packets.value = p.data
+    trainingStatus.value = t.data
   } catch (e) {
     console.error(e)
+  }
+}
+
+async function trainDetector(limit = 2000) {
+  trainingLoading.value = true
+  try {
+    const res = await anomalyApi.train(limit)
+    trainingStatus.value = {
+      trained: Boolean(res?.data?.trained),
+      vehicle_profile: res?.data?.vehicle_profile || trainingStatus.value.vehicle_profile,
+      min_train_packets: Number(
+        res?.data?.min_train_packets || trainingStatus.value.min_train_packets || 10,
+      ),
+    }
+    trainingResult.value = res.data
+
+    if (res?.data?.trained) {
+      ElMessage.success(
+        `训练完成，使用 ${res?.data?.packet_count || 0} 条流量建立基线`,
+      )
+      return true
+    }
+
+    ElMessage.warning(res?.data?.message || '训练未完成')
+    return false
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || '训练失败')
+    return false
+  } finally {
+    trainingLoading.value = false
   }
 }
 
@@ -347,7 +433,18 @@ async function simulateTraffic() {
   try {
     const res = await trafficApi.simulate(scenario.value, 200)
     const generated = Number(res?.data?.generated || 0)
-    ElMessage.success(`已生成 ${generated} 条模拟流量`)
+    const attackPackets = Number(res?.data?.attack_packets || 0)
+    ElMessage.success(
+      attackPackets > 0
+        ? `已生成 ${generated} 条模拟流量，其中 ${attackPackets} 条为恶意流量`
+        : `已生成 ${generated} 条模拟流量`,
+    )
+    if (scenario.value === 'normal') {
+      trainingResult.value = {
+        trained: trainingStatus.value.trained,
+        message: '当前为正常流量，可直接点击“训练检测器”建立基线。',
+      }
+    }
     await loadData()
   } catch (e) {
     ElMessage.error('生成模拟流量失败')
@@ -367,14 +464,24 @@ async function runDetection() {
     const detail = e?.response?.data?.detail
 
     if (status === 428) {
-      ElMessageBox.alert(
-        '检测器当前未完成训练，暂时无法执行异常检测。\n\n请先调用后端训练接口 POST /api/anomaly/train，训练完成后再点击“执行异常检测”。',
-        '检测器未训练',
-        {
-          confirmButtonText: '知道了',
-          type: 'warning',
-        },
-      )
+      try {
+        await ElMessageBox.confirm(
+          '检测器当前未完成训练。是否立即使用当前流量训练基线，然后继续执行异常检测？\n\n建议优先在“正常流量”场景下完成训练。',
+          '检测器未训练',
+          {
+            confirmButtonText: '立即训练',
+            cancelButtonText: '取消',
+            type: 'warning',
+          },
+        )
+      } catch {
+        return
+      }
+
+      const trained = await trainDetector(2000)
+      if (trained) {
+        await runDetection()
+      }
       return
     }
 
@@ -687,6 +794,20 @@ onUnmounted(() => {
 
 .scenario-field {
   margin-top: 22px;
+}
+
+.scenario-status {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.scenario-status__text {
+  color: rgba(220, 232, 248, 0.78);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .scenario-actions {

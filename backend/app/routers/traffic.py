@@ -38,6 +38,65 @@ async def _save_packets(packets: list[UnifiedPacket], db: AsyncSession):
     await db.commit()
 
 
+def _packet_attack_type(payload_decoded: object, metadata: object) -> Optional[str]:
+    if isinstance(payload_decoded, dict):
+        attack = payload_decoded.get("attack")
+        if attack:
+            return str(attack)
+
+    if isinstance(metadata, dict) and metadata.get("attack"):
+        return "simulated_attack"
+
+    return None
+
+
+def _latest_timestamp(packets: list[UnifiedPacket], fallback: float) -> float:
+    return max((p.timestamp for p in packets), default=fallback)
+
+
+def _build_simulation_packets(
+    scenario: str,
+    count: int,
+    base_time: float,
+) -> list[UnifiedPacket]:
+    packets: list[UnifiedPacket] = []
+
+    if scenario == "normal":
+        packets.extend(generate_normal_can(count, base_time))
+        packets.extend(generate_normal_eth(count // 2, base_time))
+        packets.extend(generate_normal_v2x(count // 3, base_time))
+    elif scenario == "dos":
+        normal_packets = generate_normal_can(count // 2, base_time)
+        attack_base = _latest_timestamp(normal_packets, base_time) + 0.05
+        packets.extend(normal_packets)
+        packets.extend(generate_dos_attack(count, attack_base))
+    elif scenario == "fuzzy":
+        normal_packets = generate_normal_can(count // 2, base_time)
+        attack_base = _latest_timestamp(normal_packets, base_time) + 0.05
+        packets.extend(normal_packets)
+        packets.extend(generate_fuzzy_attack(count, attack_base))
+    elif scenario == "spoofing":
+        normal_packets = generate_normal_can(count // 2, base_time)
+        attack_base = _latest_timestamp(normal_packets, base_time) + 0.05
+        packets.extend(normal_packets)
+        packets.extend(generate_spoofing_attack(count, attack_base))
+    elif scenario == "mixed":
+        normal_packets: list[UnifiedPacket] = []
+        normal_packets.extend(generate_normal_can(count, base_time))
+        normal_packets.extend(generate_normal_eth(count // 3, base_time))
+        normal_packets.extend(generate_normal_v2x(count // 4, base_time))
+
+        attack_base = _latest_timestamp(normal_packets, base_time) + 0.05
+        packets.extend(normal_packets)
+        packets.extend(generate_dos_attack(count // 3, attack_base))
+        packets.extend(generate_fuzzy_attack(count // 3, attack_base))
+        packets.extend(generate_spoofing_attack(count // 3, attack_base))
+    else:
+        raise ValueError(f"Unsupported simulation scenario: {scenario}")
+
+    return sorted(packets, key=lambda p: p.timestamp)
+
+
 @router.get("/stats", response_model=TrafficStats)
 async def get_traffic_stats(db: AsyncSession = Depends(get_db)):
     """获取流量统计概览"""
@@ -83,19 +142,26 @@ async def get_packets(
     stmt = stmt.offset(offset).limit(limit)
     result = await db.execute(stmt)
     rows = result.scalars().all()
-    return [
-        {
-            "id": r.id,
-            "timestamp": r.timestamp,
-            "protocol": r.protocol,
-            "source": r.source,
-            "destination": r.destination,
-            "msg_id": r.msg_id,
-            "domain": r.domain,
-            "payload_decoded": json.loads(r.payload_decoded) if r.payload_decoded else {},
-        }
-        for r in rows
-    ]
+    packets = []
+    for r in rows:
+        payload_decoded = json.loads(r.payload_decoded) if r.payload_decoded else {}
+        metadata = json.loads(r.metadata_json) if r.metadata_json else {}
+        attack_type = _packet_attack_type(payload_decoded, metadata)
+        packets.append(
+            {
+                "id": r.id,
+                "timestamp": r.timestamp,
+                "protocol": r.protocol,
+                "source": r.source,
+                "destination": r.destination,
+                "msg_id": r.msg_id,
+                "domain": r.domain,
+                "payload_decoded": payload_decoded,
+                "attack_type": attack_type,
+                "is_attack": bool(attack_type),
+            }
+        )
+    return packets
 
 
 @router.post("/simulate")
@@ -106,31 +172,18 @@ async def simulate_traffic(
 ):
     """生成模拟流量数据"""
     base_time = time.time()
-    packets = []
-
-    if scenario == "normal":
-        packets.extend(generate_normal_can(count, base_time))
-        packets.extend(generate_normal_eth(count // 2, base_time))
-        packets.extend(generate_normal_v2x(count // 3, base_time))
-    elif scenario == "dos":
-        packets.extend(generate_normal_can(count // 2, base_time))
-        packets.extend(generate_dos_attack(count, base_time))
-    elif scenario == "fuzzy":
-        packets.extend(generate_normal_can(count // 2, base_time))
-        packets.extend(generate_fuzzy_attack(count, base_time))
-    elif scenario == "spoofing":
-        packets.extend(generate_normal_can(count // 2, base_time))
-        packets.extend(generate_spoofing_attack(count, base_time))
-    elif scenario == "mixed":
-        packets.extend(generate_normal_can(count, base_time))
-        packets.extend(generate_dos_attack(count // 3, base_time))
-        packets.extend(generate_fuzzy_attack(count // 3, base_time))
-        packets.extend(generate_spoofing_attack(count // 3, base_time))
-        packets.extend(generate_normal_eth(count // 3, base_time))
-        packets.extend(generate_normal_v2x(count // 4, base_time))
+    packets = _build_simulation_packets(scenario, count, base_time)
+    attack_packets = sum(
+        1 for packet in packets
+        if _packet_attack_type(packet.payload_decoded, packet.metadata)
+    )
 
     await _save_packets(packets, db)
-    return {"generated": len(packets), "scenario": scenario}
+    return {
+        "generated": len(packets),
+        "attack_packets": attack_packets,
+        "scenario": scenario,
+    }
 
 
 # ---- 实时采集控制 API ----

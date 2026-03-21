@@ -6,6 +6,7 @@ app:
   host: "0.0.0.0"
   port: 8000
   debug: true
+  # 相对 SQLite 路径会按 backend/config.yaml 所在目录解析
   db_url: "sqlite+aiosqlite:///./gateway_guard.db"
   cors_origins:
     - "http://localhost:5173"
