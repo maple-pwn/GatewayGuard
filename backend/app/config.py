@@ -8,6 +8,7 @@ import yaml
 
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
+CONFIG_DIR = CONFIG_PATH.parent
 
 
 @dataclass
@@ -120,6 +121,22 @@ def _apply_section(target, section: dict) -> None:
             setattr(target, key, value)
 
 
+def _resolve_sqlite_url(db_url: str) -> str:
+    """将相对 SQLite URL 解析到 config.yaml 所在目录，避免启动目录影响数据库文件位置。"""
+    prefixes = ("sqlite+aiosqlite:///", "sqlite:///")
+    for prefix in prefixes:
+        if not db_url.startswith(prefix):
+            continue
+
+        path_part = db_url[len(prefix):]
+        if path_part.startswith("/"):
+            return db_url
+
+        resolved = (CONFIG_DIR / path_part).resolve()
+        return f"{prefix}{resolved}"
+    return db_url
+
+
 def load_config() -> AppConfig:
     data = _load_yaml()
     config = AppConfig()
@@ -147,6 +164,8 @@ def load_config() -> AppConfig:
         config.llm.provider = env_provider
     if env_ollama := os.getenv("OLLAMA_URL"):
         config.llm.ollama_base_url = env_ollama
+
+    config.db_url = _resolve_sqlite_url(config.db_url)
 
     return config
 

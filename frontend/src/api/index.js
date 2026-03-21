@@ -18,6 +18,8 @@ export const trafficApi = {
 export const anomalyApi = {
   getEvents: (params) => api.get('/anomaly/events', { params }),
   getDetail: (id) => api.get(`/anomaly/events/${id}`),
+  status: () => api.get('/anomaly/status'),
+  train: (limit) => api.post(`/anomaly/train?limit=${limit || 2000}`),
   detect: (limit) => api.post(`/anomaly/detect?limit=${limit || 500}`),
 }
 

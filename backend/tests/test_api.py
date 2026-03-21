@@ -78,6 +78,15 @@ class TestCollectorAPI:
 
 class TestAnomalyAPI:
     @pytest.mark.asyncio
+    async def test_status_defaults_to_untrained(self, client):
+        resp = await client.get("/api/anomaly/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["trained"] is False
+        assert "vehicle_profile" in data
+        assert "min_train_packets" in data
+
+    @pytest.mark.asyncio
     async def test_get_events_empty(self, client):
         resp = await client.get("/api/anomaly/events")
         assert resp.status_code == 200
@@ -110,6 +119,18 @@ class TestAnomalyAPI:
         assert "trained" in data
         assert "packet_count" in data
         assert data["packet_count"] > 0
+        assert "vehicle_profile" in data
+        assert "min_train_packets" in data
+
+    @pytest.mark.asyncio
+    async def test_status_reports_trained_after_training(self, client):
+        await client.post("/api/traffic/simulate?scenario=normal&count=120")
+        await client.post("/api/anomaly/train?limit=200")
+
+        resp = await client.get("/api/anomaly/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["trained"] is True
 
     @pytest.mark.asyncio
     async def test_events_record_type_filter(self, client):
