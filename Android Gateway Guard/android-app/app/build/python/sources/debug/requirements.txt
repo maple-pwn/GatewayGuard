@@ -1,0 +1,15 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+pydantic==2.9.0
+sqlalchemy==2.0.35
+aiosqlite==0.20.0
+openai==1.50.0
+httpx==0.27.0
+scapy==2.6.0
+python-can==4.4.0
+scikit-learn==1.5.0
+numpy==1.26.4
+pandas==2.2.0
+websockets==13.0
+python-multipart==0.0.9
+pyyaml==6.0.2

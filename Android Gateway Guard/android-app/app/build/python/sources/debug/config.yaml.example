@@ -1,0 +1,46 @@
+# GatewayGuard 配置文件
+# 复制此文件为 config.yaml 并填入实际值：
+#   cp config.yaml.example config.yaml
+
+app:
+  host: "127.0.0.1"
+  port: 8000
+  debug: false
+  # Relative SQLite path is resolved against runtime HOME.
+  db_url: "sqlite+aiosqlite:///./gateway_guard.db"
+  cors_origins:
+    - "http://localhost:5173"
+
+llm:
+  provider: "openai"          # "openai" or "ollama"
+  openai_api_key: "sk-your-key-here"
+  openai_base_url: "https://api.openai.com/v1"
+  openai_model: "gpt-4o-mini"
+  ollama_base_url: "http://localhost:11434"
+  ollama_model: "qwen2.5:7b"
+  max_tokens: 2048
+  temperature: 0.3
+
+detector:
+  rule_enabled: true
+  ml_enabled: true
+  frequency_threshold: 3.0    # 频率异常倍数阈值
+  iforest_contamination: 0.05
+  anomaly_window_size: 100    # 滑动窗口大小
+  unknown_id_policy: "strict_profile"
+  enable_iforest_aux: true
+  enable_event_aggregation: true
+  enable_payload_profile: true
+  enable_replay_detector: true
+  enable_rpm_detector: true
+  enable_gear_detector: true
+  event_window_ms: 1000.0
+  alert_cooldown_ms: 1000.0   # 同类同ID告警冷却窗口，降低告警风暴
+  min_train_packets: 10
+  burst_z_threshold: 4.0
+  gap_z_threshold: 3.0
+  temporal_window_size: 8
+  rpm_can_id: "auto"         # "auto" or explicit CAN ID like "0x316"
+  gear_can_id: "auto"        # "auto" or explicit CAN ID like "0x43F"
+  vehicle_profile: "default"
+  profile_dir: "./profiles"
